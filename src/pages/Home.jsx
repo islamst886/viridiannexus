@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion';
-import { ArrowRight, ShieldCheck, MapPin, Building, ChevronRight, ChevronLeft, Search, Heart, PlayCircle, Star, Quote } from 'lucide-react';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { ArrowRight, ShieldCheck, MapPin, Building, ChevronRight, ChevronLeft, Search, Heart, PlayCircle, Star, Quote, Loader2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../context/GlobalState';
+import { usePropertyTypes } from '../hooks/usePropertyTypes';
 
 const carouselItems = [
   {
@@ -24,7 +25,7 @@ const carouselItems = [
 
 const featuredProjects = [
   {
-    id: '1',
+    id: 'the-sapphire-penthouse',
     name: 'The Sapphire Penthouse',
     location: 'Gulshan 2, Dhaka',
     price: '৳ 5,00,00,000',
@@ -36,7 +37,7 @@ const featuredProjects = [
     status: 'Ready'
   },
   {
-    id: '2',
+    id: 'emerald-heights',
     name: 'Emerald Heights',
     location: 'Banani, Dhaka',
     price: '৳ 3,20,00,000',
@@ -48,7 +49,7 @@ const featuredProjects = [
     status: 'Ongoing'
   },
   {
-    id: '3',
+    id: 'oasis-towers',
     name: 'Oasis Towers',
     location: 'Jolshiri Abashon',
     price: '৳ 2,80,00,000',
@@ -63,20 +64,32 @@ const featuredProjects = [
 
 export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
-  const { toggleWishlist, wishlist } = useGlobalState();
-  const [filterLocation, setFilterLocation] = useState('All Locations');
-  const [filterType, setFilterType] = useState('All Types');
-  const [filterStatus, setFilterStatus] = useState('Any Status');
-  const [displayProjects, setDisplayProjects] = useState(featuredProjects);
+  const { toggleWishlist, wishlist, properties: allProjects, loadingProperties: loading } = useGlobalState();
+  const [filterLocation, setFilterLocation] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  
+  // displayProjects initializes and updates when allProjects arrives
+  const [displayProjects, setDisplayProjects] = useState([]);
+  
+  useEffect(() => {
+    setDisplayProjects(allProjects);
+  }, [allProjects]);
 
+  const navigate = useNavigate();
+  const { types: propertyTypes } = usePropertyTypes();
+
+  // Dynamically derive unique locations and statuses from real data
+  const locations = useMemo(() => [...new Set(allProjects.map(p => p.location).filter(Boolean))], [allProjects]);
+  const statuses  = useMemo(() => [...new Set(allProjects.map(p => p.status).filter(Boolean))], [allProjects]);
+
+  // Navigate to /projects with query params so filters are fully applied there
   const handleSearch = () => {
-    const filtered = featuredProjects.filter(project => {
-      const matchLocation = filterLocation === 'All Locations' || project.location.includes(filterLocation);
-      const matchType = filterType === 'All Types' || project.type.includes(filterType);
-      const matchStatus = filterStatus === 'Any Status' || project.status === filterStatus;
-      return matchLocation && matchType && matchStatus;
-    });
-    setDisplayProjects(filtered);
+    const params = new URLSearchParams();
+    if (filterLocation) params.set('location', filterLocation);
+    if (filterStatus)   params.set('status', filterStatus);
+    if (filterType)     params.set('type', filterType);
+    navigate(`/projects?${params.toString()}`);
   };
 
   const nextSlide = () => setCurrentSlide((p) => (p + 1) % carouselItems.length);
@@ -125,29 +138,22 @@ export default function Home() {
           <div className="flex-1 w-full">
             <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-1">Location</label>
             <select value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className="w-full p-2 border-b-2 border-brand-neutral focus:border-brand-primary outline-none bg-transparent text-brand-dark font-medium">
-              <option>All Locations</option>
-              <option>Jolshiri Abashon</option>
-              <option>Gulshan</option>
-              <option>Banani</option>
+              <option value="">All Locations</option>
+              {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
             </select>
           </div>
           <div className="flex-1 w-full border-t md:border-t-0 md:border-l border-gray-100 md:pl-4 pt-4 md:pt-0">
             <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-1">Property Type</label>
             <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full p-2 border-b-2 border-brand-neutral focus:border-brand-primary outline-none bg-transparent text-brand-dark font-medium">
-              <option>All Types</option>
-              <option>Penthouse</option>
-              <option>Luxury Apartment</option>
-              <option>Duplex</option>
-              <option>Smart Home</option>
+              <option value="">All Types</option>
+              {propertyTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div className="flex-1 w-full border-t md:border-t-0 md:border-l border-gray-100 md:pl-4 pt-4 md:pt-0">
             <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-1">Status</label>
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full p-2 border-b-2 border-brand-neutral focus:border-brand-primary outline-none bg-transparent text-brand-dark font-medium">
-              <option>Any Status</option>
-              <option>Ready</option>
-              <option>Ongoing</option>
-              <option>Upcoming</option>
+              <option value="">Any Status</option>
+              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div className="w-full md:w-auto mt-4 md:mt-0">
@@ -166,16 +172,21 @@ export default function Home() {
               <h2 className="text-sm font-bold text-brand-primary uppercase tracking-widest mb-2">Exclusive Portfolio</h2>
               <h3 className="text-4xl font-serif text-brand-dark">Featured Projects</h3>
             </div>
-            <Link to="/project" className="mt-4 md:mt-0 text-brand-primary font-bold hover:text-brand-dark flex items-center gap-1">
+            <Link to="/projects" className="mt-4 md:mt-0 text-brand-primary font-bold hover:text-brand-dark flex items-center gap-1">
               View All Projects <ArrowRight size={18} />
             </Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {displayProjects.length === 0 ? (
+            {loading ? (
+              <div className="col-span-full py-20 flex justify-center items-center text-brand-primary">
+                <Loader2 size={48} className="animate-spin" />
+              </div>
+            ) : displayProjects.length === 0 ? (
               <div className="col-span-full py-12 text-center text-brand-dark bg-white rounded-xl shadow-sm border border-gray-100">
-                <p className="text-xl font-bold mb-2">No projects found matching your criteria.</p>
-                <button onClick={() => { setFilterLocation('All Locations'); setFilterType('All Types'); setFilterStatus('Any Status'); setDisplayProjects(featuredProjects); }} className="text-brand-primary hover:underline font-semibold">Clear Filters</button>
+                <p className="text-xl font-bold mb-2">No properties found in the database.</p>
+                <p className="text-gray-500 mb-4">Please log in to the Admin Dashboard to add properties.</p>
+                <button onClick={() => { setFilterLocation('All Locations'); setFilterStatus('Any Status'); setDisplayProjects(allProjects); }} className="text-brand-primary hover:underline font-semibold">Clear Filters</button>
               </div>
             ) : (
               displayProjects.map(project => {
@@ -183,7 +194,7 @@ export default function Home() {
                 return (
                   <div key={project.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow overflow-hidden group border border-gray-100">
                     <div className="relative h-64 overflow-hidden">
-                      <img src={project.img} alt={project.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                      <img src={project.images?.hero || 'https://via.placeholder.com/800x600'} alt={project.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                       <div className="absolute top-4 left-4 bg-brand-dark text-brand-accent text-xs font-bold px-3 py-1 uppercase tracking-wider rounded-sm">
                         {project.status}
                       </div>
@@ -195,7 +206,6 @@ export default function Home() {
                       </button>
                     </div>
                     <div className="p-6">
-                      <div className="text-brand-primary text-sm font-bold mb-1">{project.type}</div>
                       <h4 className="text-2xl font-serif text-brand-dark mb-2">{project.name}</h4>
                       <p className="text-brand-text/70 flex items-center gap-1 text-sm mb-4"><MapPin size={16} /> {project.location}</p>
                       
@@ -206,8 +216,8 @@ export default function Home() {
                       </div>
                       
                       <div className="flex justify-between items-center">
-                        <div className="text-xl font-bold text-brand-primary">{project.price}</div>
-                        <Link to={`/project`} className="text-brand-dark font-bold hover:text-brand-primary text-sm uppercase tracking-wide">Details →</Link>
+                        <div className="text-xl font-bold text-brand-primary">৳ {project.price}</div>
+                        <Link to={`/property/${project.id}`} className="text-brand-dark font-bold hover:text-brand-primary text-sm uppercase tracking-wide">Details →</Link>
                       </div>
                     </div>
                   </div>
@@ -231,7 +241,10 @@ export default function Home() {
               <img src="https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1000&q=80" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Virtual Tour" />
               <div className="absolute inset-0 bg-brand-dark/60 group-hover:bg-brand-dark/40 transition-colors flex flex-col justify-center items-center">
                 <PlayCircle size={64} className="text-brand-accent mb-4 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
-                <h4 className="text-3xl font-serif text-white">360° Virtual Tours</h4>
+                <h4 className="text-3xl font-serif text-white flex items-center gap-3">
+                  360° Virtual Tours
+                  <span className="text-[10px] bg-brand-accent text-brand-dark px-2 py-1 rounded-sm uppercase tracking-widest font-bold">Coming Soon</span>
+                </h4>
                 <p className="text-brand-accent mt-2">Walk through your future home online.</p>
               </div>
             </Link>
@@ -242,7 +255,10 @@ export default function Home() {
                 <div className="flex items-center gap-2 mb-4 bg-red-500 text-white px-4 py-1 rounded-full text-sm font-bold animate-pulse">
                   <span className="w-2 h-2 bg-white rounded-full"></span> LIVE NOW
                 </div>
-                <h4 className="text-3xl font-serif text-white">Construction Cameras</h4>
+                <h4 className="text-3xl font-serif text-white flex items-center gap-3">
+                  Construction Cameras
+                  <span className="text-[10px] bg-brand-accent text-brand-dark px-2 py-1 rounded-sm uppercase tracking-widest font-bold">Coming Soon</span>
+                </h4>
                 <p className="text-brand-accent mt-2">Watch your investment grow 24/7.</p>
               </div>
             </Link>
@@ -337,9 +353,9 @@ export default function Home() {
           <h2 className="text-4xl md:text-5xl font-serif text-brand-accent mb-6">Ready to Secure Your Legacy?</h2>
           <p className="text-xl mb-10 text-brand-neutral/90">Join the exclusive community of Jolshiri Abashon. Book a consultation or reserve your unit online today.</p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link to="/booking" className="bg-brand-accent text-brand-dark px-8 py-4 font-bold rounded shadow-lg hover:bg-white transition-colors">Book Property Now</Link>
-            <Link to="/contact" className="bg-transparent border border-brand-accent text-brand-accent px-8 py-4 font-bold rounded hover:bg-brand-accent hover:text-brand-dark transition-colors">Contact Sales</Link>
-          </div>
+              <Link to="/contact" className="bg-brand-accent text-brand-dark px-8 py-4 font-bold rounded shadow-lg hover:bg-white transition-colors">Contact Sales Team</Link>
+              <Link to="/projects" className="bg-transparent border border-brand-accent text-brand-accent px-8 py-4 font-bold rounded hover:bg-brand-accent hover:text-brand-dark transition-colors">Browse Properties</Link>
+            </div>
         </div>
       </section>
 

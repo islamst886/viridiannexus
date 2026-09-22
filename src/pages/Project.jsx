@@ -1,81 +1,507 @@
-import { motion } from 'framer-motion';
-import { CheckCircle2, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  MapPin, BedDouble, Bath, Ruler, Building, Calendar, CheckCircle, 
+  Shield, Wifi, Car, Trees, Maximize, Home, Coffee, Info, Map, 
+  LayoutDashboard, Heart, Waves, Dumbbell, Flower2, ArrowUpCircle, 
+  UserCircle, Zap, Sun, Video, Flame, Droplets, Smile, Baby, 
+  Briefcase, BatteryCharging, Navigation, Users, Dog, Trash, Film, FileText, Download, Loader2, Clock
+} from 'lucide-react';
+import { useGlobalState } from '../context/GlobalState';
 
-export default function Project() {
-  return (
-    <div className="w-full bg-brand-neutral pb-24">
-      {/* Header */}
-      <div className="bg-brand-dark pt-32 pb-20 px-4 text-center">
-        <h1 className="text-4xl md:text-6xl font-serif text-brand-accent mb-6">Architectural & Lifestyle Specifications</h1>
-        <p className="text-xl text-brand-neutral max-w-3xl mx-auto opacity-90">
-          An open-concept 2,860 sq. ft. layout designed for absolute privacy, featuring a dedicated study, service entry, and sprawling master suites.
-        </p>
-      </div>
+const AMENITY_ICONS = {
+  '24/7 Security': Shield,
+  'Smart Home Ready': Wifi,
+  'Dedicated Parking': Car,
+  'Green Spaces': Trees,
+  'Infinity Pool': Waves,
+  'Fitness Center': Dumbbell,
+  'Rooftop Garden': Flower2,
+  'High-Speed Elevators': ArrowUpCircle,
+  'Concierge Service': UserCircle,
+  'Backup Generator': Zap,
+  'Solar Power': Sun,
+  'CCTV Surveillance': Video,
+  'Fire Safety System': Flame,
+  'Water Purification': Droplets,
+  'Spa & Sauna': Smile,
+  "Children's Play Area": Baby,
+  'Business Lounge': Briefcase,
+  'EV Charging Station': BatteryCharging,
+  'Helipad': Navigation,
+  "Servant's Quarters": Users,
+  'Pet-Friendly Areas': Dog,
+  'Waste Management': Trash,
+  'Home Theater': Film,
+  'Jacuzzi': Bath
+};
 
-      {/* Amenities Matrix */}
-      <div className="container mx-auto px-4 -mt-10">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {[
-            {
-              title: "Smart Home Integration",
-              items: ["Automated Climate Control", "Ambient Lighting Presets", "Biometric Security Systems", "Remote Access Control"]
-            },
-            {
-              title: "Recreation & Wellness",
-              items: ["Rooftop Infinity Swimming Pool", "Fully Equipped Gymnasium", "Cedar Wood Sauna", "Grand Community Hall"]
-            },
-            {
-              title: "Core Infrastructure",
-              items: ["Full Power Backup (Generators)", "Advanced Fire-Fighting Systems", "9 Dedicated Parking Spaces", "High-Speed Elevators"]
-            }
-          ].map((pillar, idx) => (
-            <motion.div 
-              key={idx}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-white shadow-xl p-8 border-t-4 border-brand-primary"
-            >
-              <h3 className="text-2xl font-serif text-brand-dark mb-6">{pillar.title}</h3>
-              <ul className="space-y-4">
-                {pillar.items.map((item, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <CheckCircle2 className="text-brand-primary shrink-0" size={24} />
-                    <span className="text-brand-text font-medium">{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </motion.div>
-          ))}
+import { useParams, Navigate, Link } from 'react-router-dom';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, info: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    this.setState({ info });
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-10 bg-white min-h-screen">
+          <h1 className="text-2xl text-red-600 font-bold mb-4">React Crash Detected</h1>
+          <p className="mb-4 text-gray-700">Please copy and paste this entire error message back to me so I can fix it instantly:</p>
+          <pre className="bg-gray-100 p-4 rounded overflow-auto border border-gray-300 text-sm">
+            {this.state.error && this.state.error.toString()}
+            <br />
+            <br />
+            {this.state.info && this.state.info.componentStack}
+          </pre>
         </div>
-      </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
-      {/* Structural Integrity - BNBC 2020 */}
-      <div className="container mx-auto px-4 mt-32 max-w-5xl">
-        <div className="bg-brand-primary text-brand-neutral p-10 md:p-16 border-l-8 border-brand-accent relative overflow-hidden">
-          <ShieldAlert size={120} className="absolute -right-10 -bottom-10 opacity-10" />
-          <h2 className="text-3xl md:text-5xl font-serif mb-8 text-brand-accent">Structural Integrity & BNBC 2020</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-            <div>
-              <p className="mb-6 leading-relaxed">
-                Dhaka lies in Seismic Zone 2 with a basic seismic coefficient (Z) of 0.20 according to the Bangladesh National Building Code (BNBC) 2020. We treat structural safety not as a feature, but as our primary mandate.
-              </p>
-              <p className="leading-relaxed">
-                Our foundation is backed by extensive soil testing and geotechnical engineering. We invite elite buyers and their consulting structural engineers to review our compliance data.
-              </p>
+function ProjectContent() {
+  const { toggleWishlist, wishlist, properties, loadingProperties } = useGlobalState();
+  const [activeFloorPlan, setActiveFloorPlan] = useState('Type A');
+
+  const getEmbedUrl = (url) => {
+    if (!url) return '';
+    if (url.includes('youtube.com/watch?v=')) {
+      const videoId = new URL(url).searchParams.get('v');
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    if (url.includes('youtu.be/')) {
+      const videoId = url.split('youtu.be/')[1].split('?')[0];
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+    return url;
+  };
+
+  const { id } = useParams();
+
+  const projectData = properties.find(p => p.id === id) || null;
+  const loading = loadingProperties;
+
+  // Inquiry Form State
+  const [inquiryData, setInquiryData] = useState({ name: '', phone: '', email: '', message: '' });
+  const [submittingInquiry, setSubmittingInquiry] = useState(false);
+
+  const handleInquirySubmit = async (e) => {
+    e.preventDefault();
+    if (!inquiryData.name || !inquiryData.phone || !inquiryData.email || !inquiryData.message) {
+      import('react-toastify').then(({ toast }) => toast.error("Please fill out all fields including a message."));
+      return;
+    }
+    setSubmittingInquiry(true);
+    try {
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
+      await addDoc(collection(db, 'inquiries'), {
+        ...inquiryData,
+        propertyId: projectData.id,
+        propertyName: projectData.name,
+        source: 'Property Details Page',
+        status: 'Unread',
+        createdAt: serverTimestamp()
+      });
+      import('react-toastify').then(({ toast }) => toast.success("Thank you! Our consultants will contact you shortly."));
+      setInquiryData({ name: '', phone: '', email: '', message: '' });
+    } catch (err) {
+      console.error(err);
+      import('react-toastify').then(({ toast }) => toast.error("Failed to submit inquiry. Please try again."));
+    } finally {
+      setSubmittingInquiry(false);
+    }
+  };
+
+  useEffect(() => {
+    // Scroll to top automatically handled by ScrollToTop component
+  }, [id]);
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-brand-neutral"><div className="animate-spin text-brand-primary">Loading...</div></div>;
+  }
+
+  if (!projectData) {
+    return <Navigate to="/" />;
+  }
+
+  const isSaved = wishlist.some(p => p.id === projectData.id);
+
+  return (
+    <div className="bg-brand-neutral min-h-screen pb-20">
+      
+      {/* 1. Immersive Hero Header */}
+      <section className="relative h-[60vh] md:h-[75vh] w-full bg-brand-dark flex items-end pb-12">
+        <div className="absolute inset-0 z-0">
+          <img src={projectData.images?.hero || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1920&q=80'} alt={projectData.name} className="w-full h-full object-cover opacity-60" />
+          <div className="absolute inset-0 bg-gradient-to-t from-brand-dark via-brand-dark/40 to-transparent"></div>
+        </div>
+        
+        <div className="container mx-auto px-4 max-w-7xl relative z-10 flex flex-col md:flex-row justify-between items-end gap-6">
+          <div className="text-white w-full md:w-2/3">
+            <div className="flex flex-wrap gap-3 mb-4">
+              <span className="inline-block bg-brand-primary text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-sm shadow-sm">
+                {projectData.status}
+              </span>
+              {projectData.completionDate && (
+                <span className="inline-flex items-center gap-1 bg-white/20 backdrop-blur-md text-white text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-sm shadow-sm border border-white/10">
+                  <Calendar size={14} /> Completion: {projectData.completionDate}
+                </span>
+              )}
             </div>
-            <div className="bg-brand-dark/20 p-6 rounded-sm">
-              <h4 className="text-xl font-serif text-brand-accent mb-4">Engineering Specifications</h4>
-              <ul className="space-y-3">
-                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-brand-accent rounded-full"></div> RC Shear Wall System</li>
-                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-brand-accent rounded-full"></div> High-Yield Strength Rebar</li>
-                <li className="flex items-center gap-2"><div className="w-2 h-2 bg-brand-accent rounded-full"></div> Mathematical Optimization for Seismic Resistance</li>
-              </ul>
+            <h1 className="text-4xl md:text-6xl font-serif mb-4 leading-tight text-white drop-shadow-md">{projectData.name}</h1>
+            <p className="flex items-center text-brand-accent text-lg mb-6 opacity-90 drop-shadow-sm">
+              <MapPin className="mr-2" size={20} /> {projectData.location}
+            </p>
+            <div className="flex flex-wrap gap-6 text-sm font-bold uppercase tracking-wider text-brand-neutral/80">
+              <div className="flex items-center gap-2"><BedDouble size={20} /> {projectData.beds} Beds</div>
+              <div className="flex items-center gap-2"><Bath size={20} /> {projectData.baths} Baths</div>
+              <div className="flex items-center gap-2"><Ruler size={20} /> {projectData.sqft} Sq.Ft</div>
             </div>
           </div>
+          
+          <div className="w-full md:w-1/3 flex flex-col md:items-end gap-3">
+            <div className="text-3xl md:text-5xl font-bold text-brand-accent mb-2">{projectData.price}</div>
+            
+            <button 
+              onClick={() => toggleWishlist(projectData)}
+              className={`flex items-center justify-center w-full md:w-auto gap-2 px-6 py-3 rounded border-2 transition-all font-bold shadow-lg ${isSaved ? 'bg-brand-accent border-brand-accent text-brand-dark' : 'bg-brand-dark/50 backdrop-blur-sm border-brand-accent text-brand-accent hover:bg-brand-accent hover:text-brand-dark'}`}
+            >
+              <Heart size={20} className={isSaved ? "fill-current" : ""} />
+              {isSaved ? 'Saved to Wishlist' : 'Save to Wishlist'}
+            </button>
+
+            {projectData.brochureUrl && (
+              <a 
+                href={projectData.brochureUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-center w-full md:w-auto gap-2 px-6 py-3 rounded bg-white text-brand-dark font-bold hover:bg-gray-100 transition-colors shadow-lg"
+              >
+                <Download size={20} className="text-brand-primary" />
+                Get Brochure
+              </a>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Main Content Layout */}
+      <div className="container mx-auto px-4 max-w-7xl mt-12">
+        <div className="flex flex-col lg:flex-row gap-12">
+          
+          {/* Left Column (Details) */}
+          <div className="w-full lg:w-8/12 space-y-16">
+            
+            {/* 2. Technical Specifications */}
+            <section>
+              <h2 className="text-2xl font-serif text-brand-dark mb-6 flex items-center gap-2 border-b border-gray-200 pb-3">
+                <Info className="text-brand-primary" /> Technical Details
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex flex-col">
+                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Building Type</span>
+                  <span className="text-brand-dark font-semibold text-lg">{projectData.buildingType || 'N/A'}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Total Share</span>
+                  <span className="text-brand-dark font-semibold text-lg">{projectData.totalShare || 'N/A'}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Unit Per Floor</span>
+                  <span className="text-brand-dark font-semibold text-lg">{projectData.unitsPerFloor || 'N/A'}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Front Road</span>
+                  <span className="text-brand-dark font-semibold text-lg">{projectData.frontRoadSize || 'N/A'}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Passenger Lift</span>
+                  <span className="text-brand-dark font-semibold text-lg">{projectData.passengerLifts || 'N/A'}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Rooftop Gardening</span>
+                  <span className="text-brand-dark font-semibold text-lg">Yes</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Electricity Backup</span>
+                  <span className="text-brand-dark font-semibold text-lg">Yes</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Car Parking</span>
+                  <span className="text-brand-dark font-semibold text-lg">Yes</span>
+                </div>
+              </div>
+            </section>
+
+            {/* 3. Detailed Overview */}
+            <section>
+              <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3">Property Overview</h2>
+              <div className="prose max-w-none text-brand-text/80 leading-relaxed space-y-4">
+                {projectData.overview ? (
+                  projectData.overview.split('\n').map((paragraph, idx) => (
+                    paragraph.trim() ? <p key={idx}>{paragraph}</p> : null
+                  ))
+                ) : (
+                  <>
+                    <p>
+                      Experience the pinnacle of luxury living at <strong>{projectData.name}</strong>, a masterfully designed residential development located in the heart of {projectData.location}. Designed for those who appreciate exclusivity, this single-unit-per-floor concept guarantees absolute privacy and an undisturbed lifestyle.
+                    </p>
+                    <p>
+                      Every unit is crafted to perfection, featuring imported marble flooring, floor-to-ceiling double-glazed windows, and an expansive layout that maximizes natural light and cross-ventilation. Step into a world where modern architecture meets ecological harmony, backed by the unparalleled security of the Jolshiri Abashon smart city infrastructure.
+                    </p>
+                  </>
+                )}
+              </div>
+            </section>
+
+            {/* Project Progress Widget */}
+            {projectData.milestones && projectData.milestones.length > 0 && (
+              <section className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden">
+                <div className="flex justify-between items-center mb-8 relative z-10">
+                  <h2 className="text-2xl font-serif text-brand-dark flex items-center gap-2">
+                    <Clock className="text-brand-primary" /> Construction Progress
+                  </h2>
+                  <Link to="/progress" className="text-sm font-bold text-brand-primary hover:text-brand-dark transition-colors uppercase tracking-wider">
+                    Full Timeline →
+                  </Link>
+                </div>
+                
+                {(() => {
+                  const total = projectData.milestones.length;
+                  const completed = projectData.milestones.filter(m => m.status === 'completed').length;
+                  const currentMilestone = projectData.milestones.find(m => m.status === 'current') 
+                                        || [...projectData.milestones].reverse().find(m => m.status === 'completed')
+                                        || projectData.milestones[0];
+                  
+                  // Calculate an overall percentage based on completed milestones, plus partial progress of current
+                  const basePercentage = (completed / total) * 100;
+                  const currentPartial = currentMilestone.status === 'current' ? ((currentMilestone.percentage || 0) / 100) * (100 / total) : 0;
+                  const overallPercentage = Math.min(100, Math.round(basePercentage + currentPartial));
+
+                  const images = currentMilestone.images || (currentMilestone.imageUrl ? [currentMilestone.imageUrl] : []);
+                  const displayImage = images[0];
+
+                  return (
+                    <div className="relative z-10">
+                      <div className="flex flex-col md:flex-row gap-6">
+                        {displayImage && (
+                          <div className="w-full md:w-1/3 h-48 rounded-xl overflow-hidden shrink-0 border border-gray-100 shadow-sm">
+                            <img src={displayImage} alt="Current Phase" className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" />
+                          </div>
+                        )}
+                        <div className="flex-1 flex flex-col justify-center">
+                          <div className="flex justify-between items-center mb-3">
+                            <span className="text-xs font-bold uppercase tracking-wider text-brand-primary bg-brand-primary/10 px-3 py-1 rounded-full">
+                              {currentMilestone.status === 'completed' ? 'Latest Completed' : currentMilestone.status === 'current' ? 'Current Phase' : 'Upcoming Phase'}
+                            </span>
+                            <span className="text-sm font-bold text-gray-500">{currentMilestone.date}</span>
+                          </div>
+                          <h3 className="text-2xl font-bold text-brand-dark mb-2">{currentMilestone.title}</h3>
+                          <p className="text-gray-600 text-sm line-clamp-3 mb-6 leading-relaxed">{currentMilestone.description}</p>
+                          
+                          <div className="mt-auto bg-gray-50 p-4 rounded-xl border border-gray-100">
+                            <div className="flex justify-between text-xs font-bold text-brand-dark uppercase tracking-wider mb-2">
+                              <span>Overall Project Status</span>
+                              <span className="text-brand-primary">{overallPercentage}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                              <div className="bg-brand-primary h-2 rounded-full transition-all duration-1000 relative" style={{ width: `${overallPercentage}%` }}>
+                                {currentMilestone.status === 'current' && <div className="absolute inset-0 bg-white/20 animate-pulse"></div>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </section>
+            )}
+
+            {/* Video Tour Section (if uploaded) */}
+            {projectData.images?.video && (
+              <section>
+                <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3">Property Video Tour</h2>
+                <div className="rounded-xl overflow-hidden shadow-lg border border-gray-100 relative pt-[56.25%]">
+                  {projectData.images.video.includes('youtube') || projectData.images.video.includes('youtu.be') ? (
+                    <iframe 
+                      src={getEmbedUrl(projectData.images.video)} 
+                      title="Property Video Tour" 
+                      className="absolute top-0 left-0 w-full h-full border-0 bg-black" 
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                      allowFullScreen 
+                    />
+                  ) : (
+                    <video src={projectData.images.video} controls className="absolute top-0 left-0 w-full h-full object-cover bg-black" />
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* 3.5 Available Units Section */}
+            {projectData.availableUnits && projectData.availableUnits.length > 0 && (
+              <section>
+                <div className="flex justify-between items-end mb-6 border-b border-gray-200 pb-3">
+                  <div>
+                    <h2 className="text-2xl font-serif text-brand-dark">Available Units</h2>
+                    <p className="text-sm text-gray-500 mt-1">Choose the perfect space for your lifestyle</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {projectData.availableUnits.map((unit, idx) => (
+                    <div key={idx} className="bg-white border border-gray-100 rounded-xl p-6 hover:shadow-lg transition-all hover:-translate-y-1">
+                      <h4 className="text-xl font-serif font-bold text-brand-primary mb-4">{unit.name}</h4>
+                      <ul className="space-y-3 text-sm text-brand-text/80 font-medium">
+                        <li className="flex justify-between border-b border-gray-50 pb-2"><span>Size</span> <span className="text-brand-dark font-bold">{unit.size} SFT</span></li>
+                        <li className="flex justify-between border-b border-gray-50 pb-2"><span>Bedrooms</span> <span className="text-brand-dark font-bold">{unit.beds}</span></li>
+                        <li className="flex justify-between border-b border-gray-50 pb-2"><span>Bathrooms</span> <span className="text-brand-dark font-bold">{unit.baths}</span></li>
+                        <li className="flex justify-between pb-1"><span>Balcony</span> <span className="text-brand-dark font-bold">{unit.balconies}</span></li>
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 4. Amenities Grid */}
+            <section>
+              <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3">Premium Amenities</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {(projectData.amenities && projectData.amenities.length > 0 ? projectData.amenities : [
+                  '24/7 Security', 'Smart Home Ready', 'Dedicated Parking', 'Green Spaces'
+                ]).map((amenityName, idx) => {
+                  const IconComponent = AMENITY_ICONS[amenityName] || CheckCircle;
+                  return (
+                    <div key={idx} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                      <div className="w-12 h-12 bg-brand-primary/10 text-brand-primary rounded-full flex items-center justify-center mb-3">
+                        <IconComponent size={24} />
+                      </div>
+                      <span className="text-sm font-semibold text-brand-dark">{amenityName}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* 5. Floor Plans Viewer */}
+            {projectData.images?.floorPlans && Object.keys(projectData.images.floorPlans).length > 0 && (
+              <section>
+                <h2 className="text-2xl font-serif text-brand-dark mb-6 flex items-center gap-2 border-b border-gray-200 pb-3">
+                  <LayoutDashboard className="text-brand-primary" /> Floor Plans
+                </h2>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="flex border-b border-gray-100 bg-gray-50">
+                    {Object.keys(projectData.images.floorPlans).map((plan) => (
+                      <button
+                        key={plan}
+                        onClick={() => setActiveFloorPlan(plan)}
+                        className={`flex-1 py-4 text-center font-bold text-sm uppercase tracking-wider transition-colors ${activeFloorPlan === plan ? 'bg-white text-brand-primary border-t-2 border-brand-primary' : 'text-gray-500 hover:bg-gray-100'}`}
+                      >
+                        {plan}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="p-8 bg-gray-100 flex justify-center items-center min-h-[400px]">
+                    <img 
+                      src={projectData.images.floorPlans[activeFloorPlan]} 
+                      alt={`Floor plan ${activeFloorPlan}`} 
+                      className="max-w-full h-auto rounded shadow-lg"
+                    />
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* 6. Location Map & Landmarks */}
+            {projectData.images?.map && (
+              <section>
+                <h2 className="text-2xl font-serif text-brand-dark mb-6 flex items-center gap-2 border-b border-gray-200 pb-3">
+                  <Map className="text-brand-primary" /> Location & Connectivity
+                </h2>
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="w-full md:w-2/3 bg-white p-2 rounded-xl shadow-sm border border-gray-100">
+                    <div className="relative h-80 rounded-lg overflow-hidden bg-gray-200">
+                      <img src={projectData.images.map} alt="Map Location" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-brand-dark/20 flex items-center justify-center pointer-events-none">
+                        <div className="bg-white px-4 py-2 rounded shadow-lg text-brand-primary font-bold flex items-center gap-2">
+                          <MapPin size={18} /> View on Google Maps
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {projectData.landmarks && (
+                    <div className="w-full md:w-1/3 bg-brand-dark text-white rounded-xl p-6 shadow-lg">
+                      <h4 className="text-lg font-serif text-brand-accent mb-6 border-b border-white/20 pb-3">Nearby Landmarks</h4>
+                      <ul className="space-y-5">
+                        {projectData.landmarks.split(',').map((landmark, i) => (
+                          <li key={i} className="flex items-start gap-3 text-sm">
+                            <CheckCircle size={18} className="text-brand-accent mt-0.5 shrink-0" />
+                            <span className="opacity-90 leading-tight">{landmark.trim()}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+          </div>
+
+          {/* Right Column (Sticky Sidebar) */}
+          <div className="w-full lg:w-4/12 relative">
+            <div className="sticky top-28 bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
+              <div className="text-center mb-8">
+                <h3 className="text-3xl font-serif text-brand-dark mb-2">Contact Us</h3>
+                <p className="text-sm text-brand-text/70 italic">Let us guide you to the extraordinary</p>
+              </div>
+              <p className="text-sm text-brand-text/80 mb-6 text-center">Share your details and our team will reach out to help you find your perfect home in {projectData.name}.</p>
+              
+              <form className="space-y-4" onSubmit={handleInquirySubmit}>
+                <div>
+                  <input type="text" required value={inquiryData.name} onChange={(e) => setInquiryData(p => ({...p, name: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm" placeholder="Full Name*" />
+                </div>
+                <div>
+                  <input type="tel" required value={inquiryData.phone} onChange={(e) => setInquiryData(p => ({...p, phone: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm" placeholder="Phone Number*" />
+                </div>
+                <div>
+                  <input type="email" required value={inquiryData.email} onChange={(e) => setInquiryData(p => ({...p, email: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm" placeholder="Email Address*" />
+                </div>
+                <div>
+                  <textarea rows="4" required value={inquiryData.message} onChange={(e) => setInquiryData(p => ({...p, message: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm resize-none" placeholder="Message*" />
+                </div>
+                
+                <button type="submit" disabled={submittingInquiry} className="w-full bg-brand-primary flex items-center justify-center gap-2 text-white font-bold py-4 rounded hover:bg-brand-dark transition-colors shadow-lg mt-2 disabled:opacity-70">
+                  {submittingInquiry && <Loader2 className="animate-spin" size={20} />}
+                  {submittingInquiry ? 'Sending...' : 'Send A Message'}
+                </button>
+
+                <div className="mt-6 text-xs text-gray-500 leading-relaxed text-center">
+                  By submitting this form, you agree to our <a href="#" className="text-brand-primary font-bold hover:underline">privacy policy</a>. Your personal information will be kept safe and secure, and we'll only use it to contact you about your inquiry.
+                </div>
+              </form>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Project() {
+  return (
+    <ErrorBoundary>
+      <ProjectContent />
+    </ErrorBoundary>
   );
 }

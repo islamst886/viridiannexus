@@ -1,62 +1,132 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGlobalState } from '../../context/GlobalState';
+import { db } from '../../firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { Building, Loader2, ChevronRight, CheckCircle, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Overview() {
-  const { user } = useGlobalState();
+  const { userProfile } = useGlobalState();
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+    
+    const q = query(collection(db, 'bookings'), where('linkedUserId', '==', userProfile.uid));
+    const unsub = onSnapshot(q, (snap) => {
+      setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [userProfile]);
+
+  const formatMoney = (amount) => {
+    if (amount === undefined || amount === null) return '৳0';
+    return '৳ ' + amount.toLocaleString('en-IN');
+  };
 
   return (
-    <div className="min-h-screen bg-viridian-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-pine-900 mb-8">Dashboard Overview</h1>
+        <h1 className="text-3xl font-bold font-serif text-gray-900 mb-8">Dashboard Overview</h1>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* User Profile Card */}
-          <div className="bg-white rounded-2xl shadow p-6 border border-viridian-100 flex items-center space-x-6">
-            <img src={user.avatar} alt="Avatar" className="w-20 h-20 rounded-full bg-viridian-100" />
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 flex items-center gap-6 col-span-1 lg:col-span-2">
+            <div className="w-20 h-20 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center text-3xl font-bold uppercase shrink-0">
+              {userProfile?.displayName?.charAt(0) || 'U'}
+            </div>
             <div>
-              <h2 className="text-2xl font-bold text-pine-900">{user.name}</h2>
-              <p className="text-pine-600">{user.email}</p>
-              <button className="mt-2 text-sm text-viridian-600 font-semibold hover:underline">Edit Profile</button>
-            </div>
-          </div>
-
-          {/* Wallet Card */}
-          <div className="bg-gradient-to-br from-pine-900 to-pine-800 rounded-2xl shadow p-6 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-20">
-              <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"></path><path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clipRule="evenodd"></path></svg>
-            </div>
-            <h3 className="text-viridian-200 text-sm font-medium mb-1 relative z-10">Digital Wallet Balance</h3>
-            <p className="text-4xl font-bold mb-4 relative z-10">৳ {user.walletBalance.toLocaleString()}</p>
-            <div className="flex space-x-3 relative z-10">
-              <button className="bg-viridian-500 hover:bg-viridian-400 text-white px-4 py-2 rounded text-sm font-semibold transition-colors">Add Funds</button>
-              <button className="bg-pine-700 hover:bg-pine-600 text-white px-4 py-2 rounded text-sm font-semibold transition-colors">History</button>
+              <h2 className="text-2xl font-bold text-gray-900">{userProfile?.displayName || 'User'}</h2>
+              <p className="text-gray-500">{userProfile?.email}</p>
+              {userProfile?.phone && <p className="text-gray-500 text-sm mt-1">{userProfile.phone}</p>}
+              <button className="mt-3 px-4 py-1.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-full hover:bg-gray-200 transition-colors">
+                Edit Profile
+              </button>
             </div>
           </div>
 
           {/* Referral Card */}
-          <div className="bg-white rounded-2xl shadow p-6 border border-viridian-100">
-            <h3 className="text-lg font-bold text-pine-900 mb-2">Refer & Earn</h3>
-            <p className="text-sm text-pine-600 mb-4">Invite friends and earn up to ৳100,000 on their first successful booking.</p>
-            <div className="bg-viridian-50 p-3 rounded flex justify-between items-center border border-viridian-200">
-              <span className="font-mono text-pine-900 font-bold tracking-wider">{user.referralCode}</span>
-              <button className="text-viridian-600 hover:text-viridian-800" title="Copy Code">
+          <div className="bg-brand-dark rounded-2xl shadow-sm p-6 border border-brand-dark text-white relative overflow-hidden">
+            <div className="absolute -right-4 -top-4 opacity-10">
+              <CheckCircle size={120} />
+            </div>
+            <h3 className="text-lg font-bold font-serif mb-2 relative z-10 text-brand-accent">Refer & Earn</h3>
+            <p className="text-sm text-gray-300 mb-4 relative z-10">Invite friends and earn up to ৳100,000 on their first successful booking.</p>
+            <div className="bg-black/30 p-3 rounded-lg flex justify-between items-center border border-white/10 relative z-10">
+              <span className="font-mono font-bold tracking-wider">{userProfile?.uid?.slice(0, 8).toUpperCase() || 'REF123'}</span>
+              <button className="text-brand-accent hover:text-white transition-colors" title="Copy Code">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Owned Assets section */}
+        {/* My Bookings Section */}
         <div className="mt-12">
-          <h2 className="text-2xl font-bold text-pine-900 mb-6">My Assets</h2>
-          <div className="bg-white rounded-2xl shadow border border-viridian-100 p-8 text-center">
-            <div className="w-20 h-20 bg-viridian-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-10 h-10 text-viridian-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-            </div>
-            <h3 className="text-lg font-bold text-pine-900 mb-2">No active assets</h3>
-            <p className="text-pine-600 max-w-md mx-auto mb-6">You haven't purchased or booked any properties yet. Explore our projects to start your real estate journey.</p>
-            <a href="/projects" className="inline-block bg-viridian-600 text-white px-6 py-3 rounded-md font-semibold hover:bg-viridian-700 transition-colors">Explore Projects</a>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold font-serif text-gray-900">My Bookings</h2>
           </div>
+          
+          {loading ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 flex justify-center">
+              <Loader2 className="animate-spin text-brand-primary" size={32} />
+            </div>
+          ) : bookings.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
+              <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Building className="w-10 h-10 text-gray-300" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">No active bookings</h3>
+              <p className="text-gray-500 max-w-md mx-auto mb-6">You haven't purchased or booked any properties yet. Explore our projects to start your real estate journey.</p>
+              <a href="/projects" className="inline-block bg-brand-primary text-white px-6 py-3 rounded-lg font-bold hover:bg-brand-dark transition-colors">
+                Explore Projects
+              </a>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {bookings.map((booking) => {
+                const completionPct = Math.min(100, Math.round(((booking.totalPaid || 0) / booking.totalPrice) * 100));
+                
+                return (
+                  <div key={booking.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow group cursor-pointer" onClick={() => navigate(`/dashboard/booking/${booking.id}`)}>
+                    <div className="p-6 border-b border-gray-100 flex justify-between items-start">
+                      <div>
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${booking.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {booking.status}
+                        </span>
+                        <h3 className="text-lg font-bold text-gray-900 mt-3">{booking.propertyName}</h3>
+                        <p className="text-sm text-gray-500">{booking.unitType} {booking.unitNumber ? `- ${booking.unitNumber}` : ''}</p>
+                      </div>
+                      <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-brand-primary/10 group-hover:text-brand-primary transition-colors">
+                        <ChevronRight size={20} />
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 bg-gray-50">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-bold text-gray-500 uppercase">Stage</span>
+                        <span className="text-sm font-bold text-brand-dark">{booking.stage}</span>
+                      </div>
+                      
+                      <div className="mt-4">
+                        <div className="flex justify-between text-xs font-bold mb-1.5">
+                          <span className="text-gray-500">Paid: {formatMoney(booking.totalPaid)}</span>
+                          <span className="text-brand-primary">{completionPct}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div className="bg-brand-primary h-1.5 rounded-full" style={{ width: `${completionPct}%` }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
