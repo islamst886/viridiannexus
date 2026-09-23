@@ -9,10 +9,10 @@ export function formatPriceBangladeshi(val) {
   if (val === null || val === undefined) return '';
   if (val >= 10000000) {
     const cr = val / 10000000;
-    return `${Number.isInteger(cr) ? cr : cr.toFixed(2)} Cr`;
+    return `${Number.isInteger(cr) ? cr : cr.toFixed(2)}\u00A0Cr`;
   } else if (val >= 100000) {
     const lacks = val / 100000;
-    return `${Number.isInteger(lacks) ? lacks : lacks.toFixed(2)} Lakhs`;
+    return `${Number.isInteger(lacks) ? lacks : lacks.toFixed(2)}\u00A0Lakhs`;
   } else {
     return val.toLocaleString('en-IN');
   }
@@ -43,11 +43,11 @@ export function formatPropertyPrice(project) {
   const uniquePrices = [...new Set(prices)];
 
   if (uniquePrices.length === 1) {
-    return `৳ ${formatPriceBangladeshi(uniquePrices[0])}`;
+    return `৳\u00A0${formatPriceBangladeshi(uniquePrices[0])}`;
   }
 
   const minPrice = Math.min(...uniquePrices);
-  return `Starts from ৳ ${formatPriceBangladeshi(minPrice)}`;
+  return `Starts from ৳\u00A0${formatPriceBangladeshi(minPrice)}`;
 }
 
 export function formatPropertySpecs(project) {

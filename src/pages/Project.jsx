@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalState';
 import { formatPropertyPrice, formatPropertySpecs, parsePriceTk, formatPriceBangladeshi } from '../utils/propertyFormatting';
+import { AVAILABLE_ICONS } from '../utils/iconLibrary';
 
 const AMENITY_ICONS = {
   '24/7 Security': Shield,
@@ -163,59 +164,75 @@ function ProjectContent() {
   return (
     <div className="bg-brand-neutral min-h-screen pb-20">
       
-      {/* 1. Immersive Hero Header */}
-      <section className="relative h-[60vh] md:h-[75vh] w-full bg-brand-dark flex items-end pb-12">
-        <div className="absolute inset-0 z-0">
-          <img src={projectData.images?.hero || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1920&q=80'} alt={projectData.name} className="w-full h-full object-cover opacity-60" />
-          <div className="absolute inset-0 bg-gradient-to-t from-brand-dark via-brand-dark/40 to-transparent"></div>
-        </div>
+      {/* 1. Premium Split Hero Header */}
+      <section className="bg-brand-dark min-h-[60vh] md:min-h-[85vh] flex flex-col md:flex-row relative">
         
-        <div className="container mx-auto px-4 max-w-7xl relative z-10 flex flex-col md:flex-row justify-between items-end gap-6">
-          <div className="text-white w-full md:w-2/3">
-            <div className="flex flex-wrap gap-3 mb-4">
+        {/* Left Content Area (Text & Specs) */}
+        <div className="w-full md:w-1/2 flex flex-col justify-center p-6 md:p-12 lg:p-24 relative z-10 pt-28 md:pt-28">
+          <div className="text-white w-full max-w-xl mx-auto md:ml-auto md:mr-0">
+            <div className="flex flex-wrap gap-3 mb-6">
               <span className="inline-block bg-brand-primary text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-sm shadow-sm">
                 {displayStatus}
               </span>
               {projectData.completionDate && (
-                <span className="inline-flex items-center gap-1 bg-white/20 backdrop-blur-md text-white text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-sm shadow-sm border border-white/10">
+                <span className="inline-flex items-center gap-1 bg-white/10 text-white text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-sm border border-white/20">
                   <Calendar size={14} /> Completion: {projectData.completionDate}
                 </span>
               )}
             </div>
-            <h1 className="text-4xl md:text-6xl font-serif mb-4 leading-tight text-white drop-shadow-md">{projectData.name}</h1>
-            <p className="flex items-center text-brand-accent text-lg mb-6 opacity-90 drop-shadow-sm">
+            
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif mb-6 leading-tight text-white drop-shadow-sm">{projectData.name}</h1>
+            
+            <p className="flex items-center text-brand-accent text-lg mb-10 opacity-90">
               <MapPin className="mr-2" size={20} /> {projectData.location}
             </p>
-            <div className="flex flex-wrap gap-6 text-sm font-bold uppercase tracking-wider text-brand-neutral/80">
-              <div className="flex items-center gap-2"><BedDouble size={20} /> {specs.beds} Beds</div>
-              <div className="flex items-center gap-2"><Bath size={20} /> {specs.baths} Baths</div>
-              <div className="flex items-center gap-2"><Ruler size={20} /> {specs.sqft} Sq.Ft</div>
+            
+            <div className="flex flex-wrap gap-6 text-sm font-bold uppercase tracking-wider text-brand-neutral/80 mb-12">
+              <div className="flex items-center gap-2"><BedDouble size={20} className="text-brand-accent" /> {specs.beds} Beds</div>
+              <div className="flex items-center gap-2"><Bath size={20} className="text-brand-accent" /> {specs.baths} Baths</div>
+              <div className="flex items-center gap-2"><Ruler size={20} className="text-brand-accent" /> {specs.sqft} Sq.Ft</div>
+            </div>
+
+            <div className="bg-white/5 p-6 md:p-8 rounded-2xl border border-white/10 backdrop-blur-md">
+              <p className="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2">Pricing</p>
+              <div className="text-3xl md:text-4xl font-bold text-white mb-8 break-normal">{priceStr}</div>
+              
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button 
+                  onClick={() => toggleWishlist(projectData)}
+                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-xl transition-all font-bold shadow-lg ${isSaved ? 'bg-brand-accent text-brand-dark' : 'bg-brand-dark text-white hover:bg-brand-accent hover:text-brand-dark border border-white/20 hover:border-transparent'}`}
+                >
+                  <Heart size={20} className={isSaved ? "fill-current" : ""} />
+                  {isSaved ? 'Saved' : 'Save Property'}
+                </button>
+
+                {projectData.brochureUrl && (
+                  <a 
+                    href={projectData.brochureUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-brand-primary text-white font-bold hover:bg-green-600 transition-colors shadow-lg"
+                  >
+                    <Download size={20} />
+                    Brochure
+                  </a>
+                )}
+              </div>
             </div>
           </div>
-          
-          <div className="w-full md:w-1/3 flex flex-col md:items-end gap-3">
-            <div className="text-3xl md:text-5xl font-bold text-brand-accent mb-2">{priceStr}</div>
-            
-            <button 
-              onClick={() => toggleWishlist(projectData)}
-              className={`flex items-center justify-center w-full md:w-auto gap-2 px-6 py-3 rounded border-2 transition-all font-bold shadow-lg ${isSaved ? 'bg-brand-accent border-brand-accent text-brand-dark' : 'bg-brand-dark/50 backdrop-blur-sm border-brand-accent text-brand-accent hover:bg-brand-accent hover:text-brand-dark'}`}
-            >
-              <Heart size={20} className={isSaved ? "fill-current" : ""} />
-              {isSaved ? 'Saved to Wishlist' : 'Save to Wishlist'}
-            </button>
+        </div>
 
-            {projectData.brochureUrl && (
-              <a 
-                href={projectData.brochureUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center justify-center w-full md:w-auto gap-2 px-6 py-3 rounded bg-white text-brand-dark font-bold hover:bg-gray-100 transition-colors shadow-lg"
-              >
-                <Download size={20} className="text-brand-primary" />
-                Get Brochure
-              </a>
-            )}
-          </div>
+        {/* Right Image Area */}
+        <div className="w-full md:w-1/2 h-[50vh] md:h-auto relative order-first md:order-last">
+          <img 
+            src={projectData.images?.hero || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1920&q=80'} 
+            alt={projectData.name} 
+            className="absolute inset-0 w-full h-full object-cover object-center md:object-cover" 
+          />
+          {/* Subtle gradient to blend the edge smoothly into the dark background on desktop */}
+          <div className="hidden md:block absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-brand-dark to-transparent"></div>
+          {/* Subtle gradient to blend the edge on mobile */}
+          <div className="md:hidden absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-brand-dark to-transparent"></div>
         </div>
       </section>
 
@@ -415,16 +432,30 @@ function ProjectContent() {
             <section>
               <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3">Premium Amenities</h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Render hardcoded amenities */}
                 {(projectData.amenities && projectData.amenities.length > 0 ? projectData.amenities : [
                   '24/7 Security', 'Smart Home Ready', 'Dedicated Parking', 'Green Spaces'
                 ]).map((amenityName, idx) => {
                   const IconComponent = AMENITY_ICONS[amenityName] || CheckCircle;
                   return (
-                    <div key={idx} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                    <div key={`hardcoded-${idx}`} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition-shadow">
                       <div className="w-12 h-12 bg-brand-primary/10 text-brand-primary rounded-full flex items-center justify-center mb-3">
                         <IconComponent size={24} />
                       </div>
                       <span className="text-sm font-semibold text-brand-dark">{amenityName}</span>
+                    </div>
+                  );
+                })}
+                
+                {/* Render custom amenities */}
+                {projectData.customAmenities && projectData.customAmenities.map((amenity, idx) => {
+                  const IconComponent = AVAILABLE_ICONS[amenity.icon] || CheckCircle;
+                  return (
+                    <div key={`custom-${idx}`} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col items-center text-center hover:shadow-md transition-shadow border-brand-accent/30">
+                      <div className="w-12 h-12 bg-brand-accent/20 text-brand-primary rounded-full flex items-center justify-center mb-3">
+                        <IconComponent size={24} />
+                      </div>
+                      <span className="text-sm font-semibold text-brand-dark">{amenity.name}</span>
                     </div>
                   );
                 })}

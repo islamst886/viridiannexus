@@ -3,9 +3,10 @@ import { db } from '../../firebase';
 import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { ArrowLeft, Save, CheckSquare, Plus, Trash2, FileText, Tag, X } from 'lucide-react';
+import { ArrowLeft, Save, CheckSquare, Plus, Trash2, FileText, Tag, X, ChevronDown } from 'lucide-react';
 import { usePropertyTypes } from '../../hooks/usePropertyTypes';
 import { useGlobalState } from '../../context/GlobalState';
+import { AVAILABLE_ICONS } from '../../utils/iconLibrary';
 
 const AVAILABLE_AMENITIES = [
   '24/7 Security', 'Smart Home Ready', 'Dedicated Parking', 'Green Spaces',
@@ -27,6 +28,7 @@ export default function PropertyForm() {
   const { adminUnsavedChanges: isDirty, setAdminUnsavedChanges: setIsDirty } = useGlobalState();
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(null);
+  const [openIconPicker, setOpenIconPicker] = useState(null);
   const [formData, setFormData] = useState({
     id: '',
     name: '',
@@ -49,6 +51,7 @@ export default function PropertyForm() {
     availableUnits: [],
     inventory: [],
     amenities: [],
+    customAmenities: [],
     images: {
       hero: '',
       map: '',
@@ -89,6 +92,7 @@ export default function PropertyForm() {
           id: docSnap.id, 
           ...data, 
           amenities: data.amenities || [],
+          customAmenities: data.customAmenities || [],
           availableUnits: data.availableUnits || [],
           inventory: data.inventory || [],
           propertyType: data.propertyType || '',
@@ -238,6 +242,7 @@ export default function PropertyForm() {
         availableUnits: formData.availableUnits,
         inventory: formData.inventory,
         amenities: formData.amenities,
+        customAmenities: formData.customAmenities || [],
         images: formData.images
       }, { merge: true });
 
@@ -677,6 +682,94 @@ export default function PropertyForm() {
             </div>
           </div>
 
+          <div className="mt-8">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-col">
+                <h4 className="text-lg font-serif text-brand-dark">Custom Amenities</h4>
+                <p className="text-sm text-gray-500">Need something that isn't in the list? Add it here with a custom icon!</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    customAmenities: [...(prev.customAmenities || []), { name: '', icon: 'CheckCircle' }]
+                  }));
+                  setIsDirty(true);
+                }}
+                className="bg-brand-primary text-white px-3 py-1 text-sm font-bold rounded flex items-center gap-1 hover:bg-brand-dark"
+              >
+                <Plus size={16} /> Add Custom
+              </button>
+            </div>
+            <div className="space-y-4">
+              {(formData.customAmenities || []).map((amenity, idx) => (
+                <div key={idx} className="flex flex-wrap md:flex-nowrap gap-3 bg-gray-50 p-4 rounded border border-gray-200 relative items-center pr-12">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, customAmenities: prev.customAmenities.filter((_, i) => i !== idx) }));
+                      setIsDirty(true);
+                    }} 
+                    className="absolute top-1/2 -translate-y-1/2 right-4 text-red-500 hover:text-red-700 p-2 bg-white rounded-full shadow-sm"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                  <div className="w-full md:w-1/2">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Amenity Name</label>
+                    <input type="text" value={amenity.name} onChange={(e) => {
+                      const newAms = [...formData.customAmenities];
+                      newAms[idx].name = e.target.value;
+                      setFormData(p => ({ ...p, customAmenities: newAms }));
+                      setIsDirty(true);
+                    }} placeholder="e.g. Infinity Edge Pool" className="w-full p-2 border rounded bg-white" />
+                  </div>
+                  <div className="w-full md:w-1/2 relative">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Select Icon</label>
+                    <button 
+                      type="button"
+                      onClick={() => setOpenIconPicker(openIconPicker === idx ? null : idx)}
+                      className="w-full flex items-center justify-between p-2.5 border border-gray-200 rounded bg-white hover:bg-gray-50 focus:border-brand-primary outline-none transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-brand-primary">
+                          {(() => {
+                             const IconComp = AVAILABLE_ICONS[amenity.icon] || AVAILABLE_ICONS['CheckCircle'];
+                             return <IconComp size={20} />;
+                          })()}
+                        </div>
+                        <span className="text-sm font-medium text-gray-700">{amenity.icon}</span>
+                      </div>
+                      <ChevronDown size={16} className={`text-gray-400 transition-transform ${openIconPicker === idx ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {openIconPicker === idx && (
+                      <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-xl p-3 grid grid-cols-6 sm:grid-cols-8 gap-2 max-h-60 overflow-y-auto">
+                        {Object.entries(AVAILABLE_ICONS).map(([key, Icon]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              const newAms = [...formData.customAmenities];
+                              newAms[idx].icon = key;
+                              setFormData(p => ({ ...p, customAmenities: newAms }));
+                              setIsDirty(true);
+                              setOpenIconPicker(null);
+                            }}
+                            className={`p-2 flex justify-center items-center rounded hover:bg-brand-primary/10 hover:text-brand-primary transition-colors ${amenity.icon === key ? 'bg-brand-primary/10 text-brand-primary ring-1 ring-brand-primary' : 'text-gray-500'}`}
+                            title={key}
+                          >
+                            <Icon size={20} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <hr className="border-gray-100" />
           
           <h3 className="text-xl font-serif text-brand-dark mb-4">Media Upload</h3>
@@ -788,47 +881,83 @@ export default function PropertyForm() {
             </div>
 
             {/* BROCHURE SECTION */}
-            <div>
-              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Property Brochure (PDF)</label>
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <label className="block text-sm font-bold text-brand-primary uppercase tracking-wider mb-4 border-b pb-3">Property Brochure</label>
               
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-gray-50 hover:bg-gray-100 transition-colors relative">
-                <div className="space-y-1 text-center">
-                  {formData.brochureUrl ? (
-                    <div className="flex flex-col items-center">
-                      <FileText size={48} className="text-brand-primary mb-2" />
-                      <a href={formData.brochureUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 underline mb-2">View Uploaded PDF</a>
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          if (formData.brochureUrl.includes('cloudinary')) {
-                            toast.info("Deleting brochure securely...");
-                            deleteCloudinaryMedia(formData.brochureUrl);
-                          }
-                          setFormData(p => ({...p, brochureUrl: ''}));
-                        }} 
-                        className="text-xs text-red-500 hover:text-red-700 font-bold"
-                      >
-                        Remove Brochure
-                      </button>
-                    </div>
-                  ) : uploadingImage === 'brochure' ? (
-                    <div className="flex flex-col items-center py-4">
-                      <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin mb-2"></div>
-                      <p className="text-sm text-brand-primary font-bold">Uploading Brochure...</p>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 1: External Link (For files &gt; 10MB)</label>
+                  <p className="text-xs text-gray-500 mb-3">Paste a public Google Drive or Dropbox link here.</p>
+                  
+                  {formData.brochureUrl && formData.brochureUrl.includes('cloudinary') ? (
+                    <div className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-md">
+                       <div className="flex items-center gap-3">
+                         <FileText size={24} className="text-indigo-500" />
+                         <div className="flex flex-col">
+                           <span className="text-sm text-indigo-900 font-bold">Uploaded to Cloudinary</span>
+                           <a href={formData.brochureUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 underline">View PDF</a>
+                         </div>
+                       </div>
+                       <button 
+                         type="button"
+                         onClick={() => {
+                           toast.info("Deleting brochure securely...");
+                           deleteCloudinaryMedia(formData.brochureUrl);
+                           setFormData(p => ({...p, brochureUrl: ''}));
+                         }}
+                         className="text-xs font-bold text-red-600 hover:text-red-800 px-4 py-2 bg-red-100 rounded-md transition-colors"
+                       >
+                         Remove File
+                       </button>
                     </div>
                   ) : (
-                    <>
-                      <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="flex text-sm text-gray-600 justify-center mt-2">
-                        <label className="relative cursor-pointer bg-white rounded-md font-medium text-brand-primary hover:text-brand-dark focus-within:outline-none px-2 py-1">
-                          <span>Upload a PDF</span>
-                          <input type="file" className="sr-only" accept=".pdf" disabled={uploadingImage !== null} onChange={(e) => handleFileUpload(e, 'brochure')} />
-                        </label>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">PDF up to 10MB</p>
-                    </>
+                    <input 
+                      type="url" 
+                      value={formData.brochureUrl || ''} 
+                      onChange={(e) => {
+                        setFormData(p => ({...p, brochureUrl: e.target.value}));
+                        setIsDirty(true);
+                      }} 
+                      placeholder="https://drive.google.com/..." 
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" 
+                    />
                   )}
                 </div>
+
+                {!formData.brochureUrl?.includes('cloudinary') && (
+                  <>
+                    <div className="relative flex py-2 items-center">
+                      <div className="flex-grow border-t border-gray-200"></div>
+                      <span className="flex-shrink-0 mx-4 text-gray-400 text-xs font-bold uppercase">Or</span>
+                      <div className="flex-grow border-t border-gray-200"></div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 2: Direct Upload (Max 10MB)</label>
+                      <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <div className="space-y-1 text-center">
+                          {uploadingImage === 'brochure' ? (
+                            <div className="flex flex-col items-center py-4">
+                              <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin mb-2"></div>
+                              <p className="text-sm text-brand-primary font-bold">Uploading...</p>
+                            </div>
+                          ) : (
+                            <>
+                              <FileText className="mx-auto h-12 w-12 text-gray-400" />
+                              <div className="flex text-sm text-gray-600 justify-center mt-2">
+                                <label className="relative cursor-pointer bg-white rounded-md font-medium text-brand-primary hover:text-brand-dark focus-within:outline-none px-2 py-1 shadow-sm border border-gray-200">
+                                  <span>Select PDF File</span>
+                                  <input type="file" className="sr-only" accept=".pdf" disabled={uploadingImage !== null} onChange={(e) => handleFileUpload(e, 'brochure')} />
+                                </label>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-2">PDF up to 10MB</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
