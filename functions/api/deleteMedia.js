@@ -21,7 +21,7 @@ export async function onRequestPost(context) {
     if (!match) {
       return new Response(JSON.stringify({ error: "Could not extract public_id from URL" }), { status: 400 });
     }
-    const publicId = match[1];
+    const publicId = decodeURIComponent(match[1]);
 
     // Get securely stored credentials from Cloudflare Environment Variables
     const apiKey = context.env.VITE_CLOUDINARY_API_KEY || context.env.CLOUDINARY_API_KEY;
@@ -47,9 +47,9 @@ export async function onRequestPost(context) {
     const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/destroy`;
 
     // Send the deletion payload
-    const formData = new FormData();
+    const formData = new URLSearchParams();
     formData.append('public_id', publicId);
-    formData.append('timestamp', timestamp);
+    formData.append('timestamp', timestamp.toString());
     formData.append('api_key', apiKey);
     formData.append('signature', signature);
 

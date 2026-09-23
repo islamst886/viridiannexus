@@ -16,9 +16,14 @@ export const deleteCloudinaryMedia = async (url) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
     });
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('text/html')) {
+      console.warn("Media deletion skipped. The local dev server intercepted the request. Ensure VITE_CLOUDINARY_API_SECRET is set in .env.");
+      return false;
+    }
     
     if (!res.ok) {
-      console.warn("Media deletion skipped. Note: /api/deleteMedia requires Wrangler for local testing or a deployed Cloudflare environment.");
+      console.warn("Media deletion API error:", await res.text());
       return false; 
     }
     

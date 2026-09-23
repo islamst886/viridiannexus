@@ -3,7 +3,7 @@ import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
-import { CheckSquare, Clock, AlertCircle, Plus, Trash2, Save, X, Edit2, Upload, Loader2, Image as ImageIcon, ArrowLeft } from 'lucide-react';
+import { CheckSquare, Clock, AlertCircle, Plus, Trash2, Save, X, Edit2, Upload, Loader2, Image as ImageIcon, ArrowLeft, ChevronDown, Building } from 'lucide-react';
 import { useGlobalState } from '../../context/GlobalState';
 import AdminSidebar from '../../components/AdminSidebar';
 import { deleteCloudinaryMedia, deleteCloudinaryMediaBeacon } from '../../utils/cloudinary';
@@ -15,6 +15,7 @@ export default function ProgressManager() {
   const navigate = useNavigate();
   const { properties, loadingProperties, adminUnsavedChanges, setAdminUnsavedChanges } = useGlobalState();
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -215,24 +216,67 @@ export default function ProgressManager() {
 
       <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border border-gray-100">
         <label className="block text-sm font-bold text-gray-700 mb-2">Select Project</label>
-        <select
-          value={selectedPropertyId}
-          onChange={(e) => {
-            if (adminUnsavedChanges) {
-              if (!window.confirm("You have unsaved changes. Are you sure you want to discard them?")) return;
-            }
-            setSelectedPropertyId(e.target.value);
-            setEditingMilestoneId(null);
-            setMilestoneForm({ id: '', date: '', title: '', description: '', status: 'upcoming', percentage: 0, images: [] });
-            setAdminUnsavedChanges(false);
-          }}
-          className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-brand-primary"
-        >
-          <option value="">— Select a Property —</option>
-          {properties.map(p => (
-            <option key={p.id} value={p.id}>{p.name} ({p.status})</option>
-          ))}
-        </select>
+        
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-brand-primary font-bold text-gray-700 text-left flex items-center justify-between cursor-pointer hover:border-brand-primary/50 transition-colors"
+          >
+            <span className="flex items-center gap-3 truncate">
+              {selectedPropertyId ? (
+                <>
+                  <Building size={18} className="text-brand-primary flex-shrink-0" />
+                  <span className="truncate">{selectedProperty?.name} ({selectedProperty?.status})</span>
+                </>
+              ) : (
+                <span className="text-gray-400 font-normal">— Select a Property —</span>
+              )}
+            </span>
+            <ChevronDown size={18} className={`text-gray-400 transition-transform duration-300 flex-shrink-0 ${dropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {dropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)}></div>
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50">
+                <div className="max-h-[300px] overflow-y-auto">
+                  {properties.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        if (adminUnsavedChanges && p.id !== selectedPropertyId) {
+                          if (!window.confirm("You have unsaved changes. Are you sure you want to discard them?")) {
+                            setDropdownOpen(false);
+                            return;
+                          }
+                        }
+                        if (p.id !== selectedPropertyId) {
+                          setSelectedPropertyId(p.id);
+                          setEditingMilestoneId(null);
+                          setMilestoneForm({ id: '', date: '', title: '', description: '', status: 'upcoming', percentage: 0, images: [] });
+                          setAdminUnsavedChanges(false);
+                        }
+                        setDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-3 transition-colors flex items-center justify-between group border-b border-gray-50 last:border-0 ${
+                        selectedPropertyId === p.id 
+                          ? 'bg-brand-primary/10 text-brand-primary font-bold' 
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="truncate pr-4">{p.name} <span className="text-xs text-gray-400 font-normal ml-2">({p.status})</span></span>
+                      {selectedPropertyId === p.id && <CheckSquare size={16} className="text-brand-primary flex-shrink-0" />}
+                    </button>
+                  ))}
+                  {properties.length === 0 && (
+                    <div className="p-4 text-center text-gray-400 text-sm">No properties available</div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {selectedPropertyId && (
