@@ -42,6 +42,7 @@ export default function PropertyForm() {
     frontRoadSize: '',
     totalShare: '',
     landmarks: '',
+    googleMapLink: '',
     completionDate: '',
     overview: '',
     brochureUrl: '',
@@ -97,6 +98,7 @@ export default function PropertyForm() {
           frontRoadSize: data.frontRoadSize || '',
           totalShare: data.totalShare || '',
           landmarks: data.landmarks || '',
+          googleMapLink: data.googleMapLink || '',
           completionDate: data.completionDate || '',
           overview: data.overview || '',
           brochureUrl: data.brochureUrl || ''
@@ -292,6 +294,12 @@ export default function PropertyForm() {
             </div>
 
             <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Google Map Link (Optional)</label>
+              <input type="url" name="googleMapLink" value={formData.googleMapLink || ''} onChange={handleInputChange} placeholder="https://maps.google.com/..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
+              <p className="text-xs text-gray-400 mt-1">If provided, the 'View on Google Map' button on the project details page will link here.</p>
+            </div>
+
+            <div className="md:col-span-2">
               <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Property Overview (Description)</label>
               <textarea name="overview" value={formData.overview} onChange={handleInputChange} rows="5" placeholder="Write a captivating description of this property..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary"></textarea>
             </div>
@@ -463,7 +471,7 @@ export default function PropertyForm() {
                 onClick={() => {
                   setFormData(prev => ({
                     ...prev,
-                    availableUnits: [...prev.availableUnits, { name: '', size: '', beds: 0, baths: 0, balconies: 0 }]
+                    availableUnits: [...prev.availableUnits, { name: '', size: '', beds: 0, baths: 0, balconies: 0, price: '' }]
                   }));
                   setIsDirty(true);
                 }}
@@ -529,6 +537,15 @@ export default function PropertyForm() {
                       setFormData(p => ({ ...p, availableUnits: newUnits }));
                       setIsDirty(true);
                     }} className="w-full p-2 border rounded" />
+                  </div>
+                  <div className="w-full md:w-1/5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Price (৳)</label>
+                    <input type="text" value={unit.price || ''} onChange={(e) => {
+                      const newUnits = [...formData.availableUnits];
+                      newUnits[idx].price = e.target.value;
+                      setFormData(p => ({ ...p, availableUnits: newUnits }));
+                      setIsDirty(true);
+                    }} placeholder="e.g. 35000000" className="w-full p-2 border rounded" />
                   </div>
                 </div>
               ))}

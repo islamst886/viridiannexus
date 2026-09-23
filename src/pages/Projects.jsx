@@ -5,14 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Search, MapPin, ChevronRight, SlidersHorizontal, X } from 'lucide-react';
 import { usePropertyTypes } from '../hooks/usePropertyTypes';
 import { useGlobalState } from '../context/GlobalState';
-
-// Parse a price string like "৳ 7,50,00,000" → 75000000 (number)
-function parsePriceTk(str) {
-  if (!str) return null;
-  const cleaned = String(str).replace(/[^\d.]/g, '');
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? null : num;
-}
+import { parsePriceTk, formatPropertyPrice } from '../utils/propertyFormatting';
 
 const PRICE_RANGES = [
   { label: 'Under 1 Crore', min: 0, max: 10000000 },
@@ -221,9 +214,17 @@ export default function Projects() {
       const status = selectedStatus.length === 0 || selectedStatus.includes(dStatus);
       const type   = selectedTypes.length === 0 || selectedTypes.includes(p.propertyType);
       const price  = activePriceRanges.length === 0 || (() => {
-        const val = parsePriceTk(p.price);
-        if (val === null) return true;
-        return activePriceRanges.some(r => val >= r.min && val < r.max);
+        const pricesToCheck = [];
+        const baseVal = parsePriceTk(p.price);
+        if (baseVal !== null) pricesToCheck.push(baseVal);
+        if (p.availableUnits && Array.isArray(p.availableUnits)) {
+          p.availableUnits.forEach(u => {
+            const uVal = parsePriceTk(u.price);
+            if (uVal !== null) pricesToCheck.push(uVal);
+          });
+        }
+        if (pricesToCheck.length === 0) return true; // If no price info, show it
+        return activePriceRanges.some(r => pricesToCheck.some(val => val >= r.min && val < r.max));
       })();
       return search && com && status && type && price;
     });
@@ -368,11 +369,9 @@ export default function Projects() {
                         {property.buildingType ? `Building Type: ${property.buildingType}` : 'Residential Property'}
                       </p>
 
-                      {property.price && (
-                        <p style={{ fontSize: '13px', fontWeight: '700', color: '#0d6e4d', marginBottom: '12px' }}>
-                          {property.price}
-                        </p>
-                      )}
+                      <p style={{ fontSize: '13px', fontWeight: '700', color: '#0d6e4d', marginBottom: '12px' }}>
+                        {formatPropertyPrice(property)}
+                      </p>
 
                       <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '13px', color: '#6b7280' }}>{property.location}</span>

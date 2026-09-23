@@ -7,6 +7,7 @@ import {
   Briefcase, BatteryCharging, Navigation, Users, Dog, Trash, Film, FileText, Download, Loader2, Clock
 } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalState';
+import { formatPropertyPrice, formatPropertySpecs, parsePriceTk, formatPriceBangladeshi } from '../utils/propertyFormatting';
 
 const AMENITY_ICONS = {
   '24/7 Security': Shield,
@@ -156,6 +157,9 @@ function ProjectContent() {
     return projectData.status;
   }, [projectData]);
 
+  const specs = React.useMemo(() => formatPropertySpecs(projectData), [projectData]);
+  const priceStr = React.useMemo(() => formatPropertyPrice(projectData), [projectData]);
+
   return (
     <div className="bg-brand-neutral min-h-screen pb-20">
       
@@ -183,14 +187,14 @@ function ProjectContent() {
               <MapPin className="mr-2" size={20} /> {projectData.location}
             </p>
             <div className="flex flex-wrap gap-6 text-sm font-bold uppercase tracking-wider text-brand-neutral/80">
-              <div className="flex items-center gap-2"><BedDouble size={20} /> {projectData.beds} Beds</div>
-              <div className="flex items-center gap-2"><Bath size={20} /> {projectData.baths} Baths</div>
-              <div className="flex items-center gap-2"><Ruler size={20} /> {projectData.sqft} Sq.Ft</div>
+              <div className="flex items-center gap-2"><BedDouble size={20} /> {specs.beds} Beds</div>
+              <div className="flex items-center gap-2"><Bath size={20} /> {specs.baths} Baths</div>
+              <div className="flex items-center gap-2"><Ruler size={20} /> {specs.sqft} Sq.Ft</div>
             </div>
           </div>
           
           <div className="w-full md:w-1/3 flex flex-col md:items-end gap-3">
-            <div className="text-3xl md:text-5xl font-bold text-brand-accent mb-2">{projectData.price}</div>
+            <div className="text-3xl md:text-5xl font-bold text-brand-accent mb-2">{priceStr}</div>
             
             <button 
               onClick={() => toggleWishlist(projectData)}
@@ -385,7 +389,21 @@ function ProjectContent() {
                         <li className="flex justify-between border-b border-gray-50 pb-2"><span>Size</span> <span className="text-brand-dark font-bold">{unit.size} SFT</span></li>
                         <li className="flex justify-between border-b border-gray-50 pb-2"><span>Bedrooms</span> <span className="text-brand-dark font-bold">{unit.beds}</span></li>
                         <li className="flex justify-between border-b border-gray-50 pb-2"><span>Bathrooms</span> <span className="text-brand-dark font-bold">{unit.baths}</span></li>
-                        <li className="flex justify-between pb-1"><span>Balcony</span> <span className="text-brand-dark font-bold">{unit.balconies}</span></li>
+                        <li className="flex justify-between border-b border-gray-50 pb-2"><span>Balcony</span> <span className="text-brand-dark font-bold">{unit.balconies}</span></li>
+                        {unit.price && (
+                           <li className="flex justify-between pb-1">
+                             <span>Price</span> 
+                             <span className="text-brand-primary font-bold">
+                               {(() => {
+                                  const p = parsePriceTk(unit.price);
+                                  return p ? `৳ ${formatPriceBangladeshi(p)}` : unit.price;
+                               })()}
+                             </span>
+                           </li>
+                        )}
+                        {!unit.price && (
+                           <li className="flex justify-between pb-1"><span>Price</span> <span className="text-brand-primary font-bold">On Request</span></li>
+                        )}
                       </ul>
                     </div>
                   ))}
@@ -452,11 +470,17 @@ function ProjectContent() {
                   <div className="w-full md:w-2/3 bg-white p-2 rounded-xl shadow-sm border border-gray-100">
                     <div className="relative h-80 rounded-lg overflow-hidden bg-gray-200">
                       <img src={projectData.images.map} alt="Map Location" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-brand-dark/20 flex items-center justify-center pointer-events-none">
-                        <div className="bg-white px-4 py-2 rounded shadow-lg text-brand-primary font-bold flex items-center gap-2">
+                      <a 
+                        href={projectData.googleMapLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(projectData.location || projectData.name)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="absolute inset-0 bg-brand-dark/20 hover:bg-brand-dark/40 transition-colors flex items-center justify-center group cursor-pointer"
+                        title="Open in Google Maps"
+                      >
+                        <div className="bg-white px-4 py-2 rounded shadow-lg text-brand-primary font-bold flex items-center gap-2 group-hover:scale-105 transition-transform">
                           <MapPin size={18} /> View on Google Maps
                         </div>
-                      </div>
+                      </a>
                     </div>
                   </div>
 

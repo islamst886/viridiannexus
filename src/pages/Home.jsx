@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../context/GlobalState';
 import { usePropertyTypes } from '../hooks/usePropertyTypes';
+import { formatPropertyPrice, formatPropertySpecs } from '../utils/propertyFormatting';
 
 const carouselItems = [
   {
@@ -191,6 +192,8 @@ export default function Home() {
             ) : (
               displayProjects.map(project => {
                 const isSaved = wishlist.some(p => p.id === project.id);
+                const specs = formatPropertySpecs(project);
+                const priceStr = formatPropertyPrice(project);
                 return (
                   <div key={project.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow overflow-hidden group border border-gray-100">
                     <div className="relative h-64 overflow-hidden">
@@ -210,13 +213,13 @@ export default function Home() {
                       <p className="text-brand-text/70 flex items-center gap-1 text-sm mb-4"><MapPin size={16} /> {project.location}</p>
                       
                       <div className="flex justify-between items-center border-t border-b border-gray-100 py-3 mb-4 text-brand-dark/80 text-sm font-medium">
-                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/bed.png" className="w-5 h-5" alt="bed"/> {project.beds} Beds</div>
-                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/shower.png" className="w-5 h-5" alt="bath"/> {project.baths} Baths</div>
-                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/ruler.png" className="w-5 h-5" alt="sqft"/> {project.sqft} SqFt</div>
+                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/bed.png" className="w-5 h-5" alt="bed"/> {specs.beds} Beds</div>
+                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/shower.png" className="w-5 h-5" alt="bath"/> {specs.baths} Baths</div>
+                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/ruler.png" className="w-5 h-5" alt="sqft"/> {specs.sqft} SqFt</div>
                       </div>
                       
                       <div className="flex justify-between items-center">
-                        <div className="text-xl font-bold text-brand-primary">৳ {project.price}</div>
+                        <div className="text-xl font-bold text-brand-primary">{priceStr}</div>
                         <Link to={`/property/${project.id}`} className="text-brand-dark font-bold hover:text-brand-primary text-sm uppercase tracking-wide">Details →</Link>
                       </div>
                     </div>
