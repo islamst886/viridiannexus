@@ -17,13 +17,13 @@ export const deleteCloudinaryMedia = async (url) => {
       body: JSON.stringify({ url })
     });
     const contentType = res.headers.get('content-type');
-    if (contentType && contentType.includes('text/html')) {
-      console.warn("Media deletion skipped. The local dev server intercepted the request. Ensure VITE_CLOUDINARY_API_SECRET is set in .env.");
-      return false;
-    }
     
     if (!res.ok) {
-      console.warn("Media deletion API error:", await res.text());
+      if (contentType && contentType.includes('text/html')) {
+         console.error("Media deletion API returned HTML (Error 500 or 404). This means the Cloudflare Function failed or doesn't exist. Check your deployment logs.");
+      } else {
+         console.error("Media deletion API error:", await res.text());
+      }
       return false; 
     }
     

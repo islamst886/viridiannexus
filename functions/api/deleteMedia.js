@@ -23,10 +23,14 @@ export async function onRequestPost(context) {
     }
     const publicId = decodeURIComponent(match[1]);
 
-    // Get securely stored credentials from Cloudflare Environment Variables
-    const apiKey = context.env.VITE_CLOUDINARY_API_KEY || context.env.CLOUDINARY_API_KEY;
-    const apiSecret = context.env.VITE_CLOUDINARY_API_SECRET || context.env.CLOUDINARY_API_SECRET;
-    const cloudName = context.env.VITE_CLOUDINARY_CLOUD_NAME || context.env.CLOUDINARY_CLOUD_NAME;
+    // Get securely stored credentials from Cloudflare Environment Variables and trim to avoid hidden whitespaces
+    const rawApiKey = context.env.VITE_CLOUDINARY_API_KEY || context.env.CLOUDINARY_API_KEY;
+    const rawApiSecret = context.env.VITE_CLOUDINARY_API_SECRET || context.env.CLOUDINARY_API_SECRET;
+    const rawCloudName = context.env.VITE_CLOUDINARY_CLOUD_NAME || context.env.CLOUDINARY_CLOUD_NAME;
+
+    const apiKey = rawApiKey ? rawApiKey.trim() : null;
+    const apiSecret = rawApiSecret ? rawApiSecret.trim() : null;
+    const cloudName = rawCloudName ? rawCloudName.trim() : null;
 
     if (!apiKey || !apiSecret || !cloudName) {
       return new Response(JSON.stringify({ error: "Server missing Cloudinary credentials" }), { status: 500 });
