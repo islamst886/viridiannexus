@@ -276,13 +276,15 @@ export default function AdminBookingDetail() {
                       <ShieldCheck size={14} /> Linked
                     </span>
                   )}
-                  <button onClick={() => setIsEditClientModalOpen(true)} className="ml-auto text-xs font-bold text-brand-primary hover:underline">
-                    Edit Details
-                  </button>
+                  {booking.status !== 'Cancelled' && (
+                    <button onClick={() => setIsEditClientModalOpen(true)} className="ml-auto text-xs font-bold text-brand-primary hover:underline">
+                      Edit Details
+                    </button>
+                  )}
                 </div>
 
                 {/* Profile Sync Notification Banner if differences exist */}
-                {profileDifferences.length > 0 && (
+                {profileDifferences.length > 0 && booking.status !== 'Cancelled' && (
                   <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-3.5 mb-4 text-xs space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1.5 font-bold text-amber-900">
@@ -328,9 +330,11 @@ export default function AdminBookingDetail() {
                 <div className="flex items-center gap-2 mb-4">
                   <Building size={20} className="text-brand-primary" />
                   <h2 className="text-lg font-bold">Property Details</h2>
-                  <button onClick={() => setIsChangeUnitModalOpen(true)} className="ml-auto text-xs font-bold text-brand-primary hover:underline">
-                    Change Unit
-                  </button>
+                  {booking.status !== 'Cancelled' && (
+                    <button onClick={() => setIsChangeUnitModalOpen(true)} className="ml-auto text-xs font-bold text-brand-primary hover:underline">
+                      Change Unit
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-3 text-sm">
                   <div><span className="text-gray-500 block text-xs font-bold uppercase">Project</span> <span className="font-medium text-brand-dark text-lg">{booking.propertyName}</span></div>
@@ -377,12 +381,14 @@ export default function AdminBookingDetail() {
                     <h2 className="text-lg font-bold">Booking Stage</h2>
                     <p className="text-xs text-gray-500">Track and advance project milestones</p>
                   </div>
-                  <button 
-                    onClick={() => { setTargetStageCandidate(null); setIsStageModalOpen(true); }}
-                    className="px-4 py-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    Advance Milestone
-                  </button>
+                  {booking.status !== 'Cancelled' && (
+                    <button 
+                      onClick={() => { setTargetStageCandidate(null); setIsStageModalOpen(true); }}
+                      className="px-4 py-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                    >
+                      Advance Milestone
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center">
@@ -393,7 +399,12 @@ export default function AdminBookingDetail() {
                       <div 
                         key={s} 
                         className="flex-1 relative flex flex-col items-center cursor-pointer group"
-                        onClick={() => { setTargetStageCandidate(s); setIsStageModalOpen(true); }}
+                        onClick={() => { 
+                          if (booking.status !== 'Cancelled') {
+                            setTargetStageCandidate(s); 
+                            setIsStageModalOpen(true); 
+                          }
+                        }}
                         title={`Click to view milestone requirements for ${s}`}
                       >
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-transform group-hover:scale-110 shadow-sm ${isCompleted ? 'bg-brand-primary text-white' : 'bg-gray-200 text-gray-500'} ${isCurrent ? 'ring-4 ring-brand-primary/20' : ''}`}>
@@ -413,7 +424,9 @@ export default function AdminBookingDetail() {
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-gray-200 flex justify-between items-center">
                   <h2 className="text-lg font-bold flex items-center gap-2"><FileText size={20} /> Payment Ledger</h2>
-                  <button onClick={() => setIsCustomPaymentModalOpen(true)} className="text-sm font-bold text-brand-primary hover:underline">Add Custom Payment</button>
+                  {booking.status !== 'Cancelled' && (
+                    <button onClick={() => setIsCustomPaymentModalOpen(true)} className="text-sm font-bold text-brand-primary hover:underline">Add Custom Payment</button>
+                  )}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
@@ -458,12 +471,16 @@ export default function AdminBookingDetail() {
                               <td className="px-6 py-4 text-gray-500">{p.paymentMode || '—'}</td>
                               <td className="px-6 py-4 text-right">
                                 {p.status !== 'Paid' && p.status !== 'Waived' ? (
-                                  <button 
-                                    onClick={() => { setSelectedPayment(p); setIsPaymentModalOpen(true); }}
-                                    className="text-brand-primary font-bold hover:underline"
-                                  >
-                                    Record
-                                  </button>
+                                  booking.status === 'Cancelled' ? (
+                                    <span className="text-gray-400">Canceled</span>
+                                  ) : (
+                                    <button 
+                                      onClick={() => { setSelectedPayment(p); setIsPaymentModalOpen(true); }}
+                                      className="text-brand-primary font-bold hover:underline"
+                                    >
+                                      Record
+                                    </button>
+                                  )
                                 ) : (
                                   <span className="text-gray-400">Done</span>
                                 )}

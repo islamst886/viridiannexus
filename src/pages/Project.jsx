@@ -95,6 +95,7 @@ function ProjectContent() {
   // Inquiry Form State
   const [inquiryData, setInquiryData] = useState({ name: '', phone: '', email: '', message: '' });
   const [submittingInquiry, setSubmittingInquiry] = useState(false);
+  const [agreedToPolicy, setAgreedToPolicy] = useState(false);
 
   useEffect(() => {
     if (isLoggedIn && userProfile) {
@@ -111,6 +112,10 @@ function ProjectContent() {
     e.preventDefault();
     if (!inquiryData.name || !inquiryData.phone || !inquiryData.email || !inquiryData.message) {
       import('react-toastify').then(({ toast }) => toast.error("Please fill out all fields including a message."));
+      return;
+    }
+    if (!agreedToPolicy) {
+      import('react-toastify').then(({ toast }) => toast.error("You must agree to the privacy policy."));
       return;
     }
     setSubmittingInquiry(true);
@@ -571,8 +576,17 @@ function ProjectContent() {
                   {submittingInquiry ? 'Sending...' : 'Send A Message'}
                 </button>
 
-                <div className="mt-6 text-xs text-gray-500 leading-relaxed text-center">
-                  By submitting this form, you agree to our <a href="#" className="text-brand-primary font-bold hover:underline">privacy policy</a>. Your personal information will be kept safe and secure, and we'll only use it to contact you about your inquiry.
+                <div className="mt-6 flex items-start gap-3 text-xs text-gray-500 leading-relaxed">
+                  <input 
+                    type="checkbox" 
+                    id="privacy-policy" 
+                    checked={agreedToPolicy}
+                    onChange={(e) => setAgreedToPolicy(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 shrink-0 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary focus:ring-2 cursor-pointer accent-brand-primary"
+                  />
+                  <label htmlFor="privacy-policy" className="cursor-pointer">
+                    By submitting this form, you agree to our <Link to="/legal" target="_blank" className="text-brand-primary font-bold hover:underline">privacy policy</Link>. Your personal information will be kept safe and secure, and we'll only use it to contact you about your inquiry.
+                  </label>
                 </div>
               </form>
             </div>
