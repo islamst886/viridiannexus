@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useGlobalState } from '../context/GlobalState';
 import { Loader2, ShieldAlert } from 'lucide-react';
+import UnsavedChangesGuard from './UnsavedChangesGuard';
 
 export default function SuperAdminRoute({ children }) {
   const { authLoading, isLoggedIn, isSuperAdmin } = useGlobalState();
@@ -34,5 +35,9 @@ export default function SuperAdminRoute({ children }) {
     );
   }
 
-  return children;
+  return (
+    <UnsavedChangesGuard>
+      {children}
+    </UnsavedChangesGuard>
+  );
 }

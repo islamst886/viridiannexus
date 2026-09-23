@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
 import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { ArrowLeft, Save, CheckSquare, Plus, Trash2, FileText, Tag, X, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Save, CheckSquare, Plus, Trash2, FileText, Tag, X, ChevronDown, AlertTriangle } from 'lucide-react';
 import { usePropertyTypes } from '../../hooks/usePropertyTypes';
 import { useGlobalState } from '../../context/GlobalState';
 import { AVAILABLE_ICONS } from '../../utils/iconLibrary';
@@ -25,7 +25,7 @@ export default function PropertyForm() {
   const [customTypeInput, setCustomTypeInput] = useState('');
   
   const [localPropertyTypes, setLocalPropertyTypes] = useState([]);
-  const { adminUnsavedChanges: isDirty, setAdminUnsavedChanges: setIsDirty } = useGlobalState();
+  const { adminUnsavedChanges: isDirty, setAdminUnsavedChanges: setIsDirty, setBypassUnsavedGuard } = useGlobalState();
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(null);
   const [openIconPicker, setOpenIconPicker] = useState(null);
@@ -64,24 +64,11 @@ export default function PropertyForm() {
       setLocalPropertyTypes([...propertyTypes]);
     }
   }, [propertyTypes, typesLoading]);
-
   useEffect(() => {
     if (isEditing) {
       fetchProperty();
     }
   }, [id]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (isDirty) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty]);
-
   const fetchProperty = async () => {
     try {
       const docRef = doc(db, 'properties', id);
@@ -216,6 +203,7 @@ export default function PropertyForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setBypassUnsavedGuard(true);
 
     try {
       const propId = formData.id || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -255,6 +243,7 @@ export default function PropertyForm() {
     } catch (error) {
       console.error(error);
       toast.error("Error saving property");
+      setBypassUnsavedGuard(false);
     } finally {
       setLoading(false);
     }
@@ -272,14 +261,24 @@ export default function PropertyForm() {
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={handleBack} className="p-2 bg-white rounded-full shadow hover:bg-gray-100 transition">
+            <button type="button" onClick={handleBack} className="p-2 bg-white rounded-full shadow hover:bg-gray-100 transition">
               <ArrowLeft size={24} className="text-brand-dark" />
             </button>
             <h1 className="text-3xl font-serif text-brand-dark">{isEditing ? 'Edit Property' : 'Create New Property'}</h1>
           </div>
+          
+          <button 
+            type="submit" 
+            form="property-form"
+            disabled={loading}
+            className="flex items-center gap-2 bg-brand-primary text-white px-6 py-2 rounded-lg font-bold hover:bg-brand-dark transition-colors shadow-sm disabled:opacity-50"
+          >
+            <Save size={18} />
+            {loading ? 'Saving...' : 'Save Property'}
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-8">
+        <form id="property-form" onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-8">
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
@@ -357,6 +356,7 @@ export default function PropertyForm() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (!window.confirm("Are you sure you want to remove this custom type?")) return;
                           setLocalPropertyTypes(prev => prev.filter(type => type !== t));
                           setIsDirty(true);
                         }}
@@ -493,6 +493,7 @@ export default function PropertyForm() {
                   <button 
                     type="button" 
                     onClick={() => {
+                      if (!window.confirm("Are you sure you want to remove this unit type?")) return;
                       setFormData(prev => ({ ...prev, availableUnits: prev.availableUnits.filter((_, i) => i !== idx) }));
                       setIsDirty(true);
                     }} 
@@ -590,6 +591,7 @@ export default function PropertyForm() {
                   <button 
                     type="button" 
                     onClick={() => {
+                      if (!window.confirm("Are you sure you want to remove this inventory unit?")) return;
                       setFormData(prev => ({ ...prev, inventory: prev.inventory.filter((_, i) => i !== idx) }));
                       setIsDirty(true);
                     }} 
@@ -708,6 +710,7 @@ export default function PropertyForm() {
                   <button 
                     type="button" 
                     onClick={() => {
+                      if (!window.confirm("Are you sure you want to remove this custom amenity?")) return;
                       setFormData(prev => ({ ...prev, customAmenities: prev.customAmenities.filter((_, i) => i !== idx) }));
                       setIsDirty(true);
                     }} 

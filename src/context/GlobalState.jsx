@@ -16,6 +16,7 @@ export const GlobalStateProvider = ({ children }) => {
   const [properties, setProperties] = useState([]);
   const [loadingProperties, setLoadingProperties] = useState(true);
   const [adminUnsavedChanges, setAdminUnsavedChanges] = useState(false);
+  const [bypassUnsavedGuard, setBypassUnsavedGuard] = useState(false);
 
   useEffect(() => {
     let unsubProfile = () => { };
@@ -145,7 +146,9 @@ export const GlobalStateProvider = ({ children }) => {
       properties,
       loadingProperties,
       adminUnsavedChanges,
-      setAdminUnsavedChanges
+      setAdminUnsavedChanges,
+      bypassUnsavedGuard,
+      setBypassUnsavedGuard
     }}>
       {children}
     </GlobalStateContext.Provider>

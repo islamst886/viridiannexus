@@ -10,26 +10,8 @@ export default function AdminSidebar() {
   const navigate = useNavigate();
   const { adminUnsavedChanges, setAdminUnsavedChanges, isSuperAdmin } = useGlobalState();
 
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (adminUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [adminUnsavedChanges]);
-
   const handleNavigation = (path) => {
-    if (adminUnsavedChanges) {
-      if (window.confirm("You have unsaved changes. Are you sure you want to discard them and leave this page?")) {
-        setAdminUnsavedChanges(false);
-        navigate(path);
-      }
-    } else {
-      navigate(path);
-    }
+    navigate(path);
   };
 
   const handleLogout = async () => {

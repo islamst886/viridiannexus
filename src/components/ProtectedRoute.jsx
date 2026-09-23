@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useGlobalState } from '../context/GlobalState';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import UnsavedChangesGuard from './UnsavedChangesGuard';
 
 export default function ProtectedRoute({ children }) {
   const { authLoading, isLoggedIn, isAdmin } = useGlobalState();
@@ -29,5 +30,9 @@ export default function ProtectedRoute({ children }) {
     return <Navigate to="/" replace />;
   }
 
-  return children;
+  return (
+    <UnsavedChangesGuard>
+      {children}
+    </UnsavedChangesGuard>
+  );
 }

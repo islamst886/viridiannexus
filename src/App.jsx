@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom';
 import Layout from './components/Layout';
 import ScrollToTop from './components/ScrollToTop';
 import Home from './pages/Home';
@@ -41,80 +41,64 @@ import SuperAdminRoute from './components/SuperAdminRoute';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-function App() {
+function Root() {
   return (
-    <Router>
+    <>
       <ScrollToTop />
       <ToastContainer position="top-right" autoClose={3000} />
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="project" element={<Project />} />
-          <Route path="property/:id" element={<Project />} />
-          <Route path="location" element={<Location />} />
-          <Route path="legal" element={<Legal />} />
-          <Route path="nrb" element={<NRB />} />
-          <Route path="contact" element={<Contact />} />
-
-          {/* New Premium Routes */}
-          <Route path="virtual-tour" element={<VirtualTour />} />
-          <Route path="live-cameras" element={<LiveCameras />} />
-          <Route path="progress" element={<ProjectProgress />} />
-          
-          <Route path="auth" element={<AuthPage />} />
-          <Route path="booking" element={<ProtectedUserRoute><Booking /></ProtectedUserRoute>} />
-          
-          <Route path="dashboard" element={<ProtectedUserRoute><Overview /></ProtectedUserRoute>} />
-          <Route path="dashboard/wishlist" element={<ProtectedUserRoute><Wishlist /></ProtectedUserRoute>} />
-          <Route path="dashboard/booking/:bookingId" element={<ProtectedUserRoute><BookingDetail /></ProtectedUserRoute>} />
-        </Route>
-
-        {/* Admin Routes (No Layout) */}
-        <Route path="/admin" element={<AdminLogin />} />
-        <Route
-          path="/admin/dashboard"
-          element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/messages"
-          element={<ProtectedRoute><AdminMessages /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/bookings"
-          element={<ProtectedRoute><AdminBookings /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/bookings/:bookingId"
-          element={<ProtectedRoute><AdminBookingDetail /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/booking-requests"
-          element={<ProtectedRoute><BookingRequests /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/progress"
-          element={<ProtectedRoute><ProgressManager /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/newsletter"
-          element={<ProtectedRoute><AdminNewsletter /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/property/new"
-          element={<ProtectedRoute><PropertyForm /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/property/:id"
-          element={<ProtectedRoute><PropertyForm /></ProtectedRoute>}
-        />
-        <Route
-          path="/admin/users"
-          element={<SuperAdminRoute><UserManager /></SuperAdminRoute>}
-        />
-      </Routes>
-    </Router>
+      <Outlet />
+    </>
   );
+}
+
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <Root />,
+    children: [
+      {
+        path: "/",
+        element: <Layout />,
+        children: [
+          { index: true, element: <Home /> },
+          { path: "projects", element: <Projects /> },
+          { path: "project", element: <Project /> },
+          { path: "property/:id", element: <Project /> },
+          { path: "location", element: <Location /> },
+          { path: "legal", element: <Legal /> },
+          { path: "nrb", element: <NRB /> },
+          { path: "contact", element: <Contact /> },
+
+          { path: "virtual-tour", element: <VirtualTour /> },
+          { path: "live-cameras", element: <LiveCameras /> },
+          { path: "progress", element: <ProjectProgress /> },
+          
+          { path: "auth", element: <AuthPage /> },
+          { path: "booking", element: <ProtectedUserRoute><Booking /></ProtectedUserRoute> },
+          
+          { path: "dashboard", element: <ProtectedUserRoute><Overview /></ProtectedUserRoute> },
+          { path: "dashboard/wishlist", element: <ProtectedUserRoute><Wishlist /></ProtectedUserRoute> },
+          { path: "dashboard/booking/:bookingId", element: <ProtectedUserRoute><BookingDetail /></ProtectedUserRoute> }
+        ]
+      },
+      // Admin Routes (No Layout)
+      { path: "admin", element: <AdminLogin /> },
+      { path: "admin/dashboard", element: <ProtectedRoute><AdminDashboard /></ProtectedRoute> },
+      { path: "admin/messages", element: <ProtectedRoute><AdminMessages /></ProtectedRoute> },
+      { path: "admin/bookings", element: <ProtectedRoute><AdminBookings /></ProtectedRoute> },
+      { path: "admin/bookings/:bookingId", element: <ProtectedRoute><AdminBookingDetail /></ProtectedRoute> },
+      { path: "admin/booking-requests", element: <ProtectedRoute><BookingRequests /></ProtectedRoute> },
+      { path: "admin/progress", element: <ProtectedRoute><ProgressManager /></ProtectedRoute> },
+      { path: "admin/newsletter", element: <ProtectedRoute><AdminNewsletter /></ProtectedRoute> },
+      { path: "admin/property/new", element: <ProtectedRoute><PropertyForm /></ProtectedRoute> },
+      { path: "admin/property/:id", element: <ProtectedRoute><PropertyForm /></ProtectedRoute> },
+      { path: "admin/users", element: <SuperAdminRoute><UserManager /></SuperAdminRoute> }
+    ]
+  }
+]);
+
+function App() {
+  return <RouterProvider router={router} />;
 }
 
 export default App;
