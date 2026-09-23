@@ -305,8 +305,9 @@ export default function PropertyForm() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Price (৳)</label>
-              <input type="text" name="price" value={formData.price} onChange={handleInputChange} required className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
+              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Base Price (৳) <span className="text-gray-400 font-normal normal-case">(Fallback)</span></label>
+              <input type="text" name="price" value={formData.price} onChange={handleInputChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
+              <p className="text-xs text-gray-400 mt-1">Used if no specific floor plan prices are added.</p>
             </div>
 
             <div className="md:col-span-2 space-y-6">
@@ -413,18 +414,19 @@ export default function PropertyForm() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Beds</label>
-              <input type="number" name="beds" value={formData.beds} onChange={handleInputChange} required className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
+              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Base Beds <span className="text-gray-400 font-normal normal-case">(Fallback)</span></label>
+              <input type="number" name="beds" value={formData.beds} onChange={handleInputChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Baths</label>
-              <input type="number" name="baths" value={formData.baths} onChange={handleInputChange} required className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
+              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Base Baths <span className="text-gray-400 font-normal normal-case">(Fallback)</span></label>
+              <input type="number" name="baths" value={formData.baths} onChange={handleInputChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Square Feet</label>
-              <input type="text" name="sqft" value={formData.sqft} onChange={handleInputChange} required className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
+              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Base Square Feet <span className="text-gray-400 font-normal normal-case">(Fallback)</span></label>
+              <input type="text" name="sqft" value={formData.sqft} onChange={handleInputChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" />
+              <p className="text-xs text-gray-400 mt-1">If you add specific "Unit Types (Floor Plans)" below, these base values are ignored, and ranges are auto-calculated instead.</p>
             </div>
           </div>
 
