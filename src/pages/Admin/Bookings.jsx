@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
 import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, setDoc, serverTimestamp, runTransaction, getDocs, where } from 'firebase/firestore';
 import { useGlobalState } from '../../context/GlobalState';
@@ -6,6 +6,65 @@ import AdminSidebar from '../../components/AdminSidebar';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, ArrowRight, Loader2, X, ChevronRight, CheckCircle, FileText, Info, ShieldCheck } from 'lucide-react';
 import { toast } from 'react-toastify';
+
+const AdminCustomSelect = ({ value, onChange, options, placeholder }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find(opt => opt.value === value);
+
+  return (
+    <div ref={wrapperRef} className="relative w-full">
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary/50 bg-white cursor-pointer flex justify-between items-center"
+      >
+        <span className={`truncate pr-4 ${selectedOption ? 'text-gray-900' : 'text-gray-500'}`}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronRight size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-90' : 'rotate-0'}`} />
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
+          <div className="overflow-y-auto max-h-[250px] py-1">
+            <div
+              onClick={() => {
+                onChange('');
+                setIsOpen(false);
+              }}
+              className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 text-gray-500 ${!value ? 'bg-brand-primary/10 font-bold' : ''}`}
+            >
+              {placeholder}
+            </div>
+            {options.map((opt) => (
+              <div 
+                key={opt.value}
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 border-t border-gray-50 ${opt.value === value ? 'bg-brand-primary/10 text-brand-dark font-bold' : 'text-gray-700'}`}
+              >
+                {opt.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function AdminBookings() {
   const [bookings, setBookings] = useState([]);
@@ -647,36 +706,29 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
               <h3 className="text-lg font-bold border-b pb-2 mb-4">Select Property & Unit</h3>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Property *</label>
-                <select 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary/50"
+                <AdminCustomSelect 
                   value={form.propertyId}
-                  onChange={(e) => setForm({...form, propertyId: e.target.value, unitType: ''})}
-                >
-                  <option value="">Select Property</option>
-                  {properties.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} - {p.location}</option>
-                  ))}
-                </select>
+                  onChange={(val) => setForm({...form, propertyId: val, unitType: ''})}
+                  options={properties.map(p => ({ value: p.id, label: `${p.name} - ${p.location}` }))}
+                  placeholder="Select Property"
+                />
               </div>
               
               {currentProperty && currentProperty.inventory && currentProperty.inventory.length > 0 ? (
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">Select Specific Unit *</label>
-                  <select 
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary/50"
+                  <AdminCustomSelect 
                     value={form.inventoryId}
-                    onChange={(e) => setForm({...form, inventoryId: e.target.value})}
-                  >
-                    <option value="">Select an available unit...</option>
-                    {currentProperty.inventory.filter(inv => inv.status === 'Available').map(inv => {
+                    onChange={(val) => setForm({...form, inventoryId: val})}
+                    options={currentProperty.inventory.filter(inv => inv.status === 'Available').map(inv => {
                       const isRedundant = inv.unitType.toLowerCase().includes(inv.unitName.toLowerCase());
-                      return (
-                        <option key={inv.id} value={inv.id}>
-                          Floor {inv.floor} - {isRedundant ? inv.unitType : `Unit ${inv.unitName} (${inv.unitType})`}
-                        </option>
-                      );
+                      return {
+                        value: inv.id,
+                        label: `Floor ${inv.floor} - ${isRedundant ? inv.unitType : `Unit ${inv.unitName} (${inv.unitType})`}`
+                      };
                     })}
-                  </select>
+                    placeholder="Select an available unit..."
+                  />
                 </div>
               ) : currentProperty ? (
                 <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm">
