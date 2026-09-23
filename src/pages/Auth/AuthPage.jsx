@@ -55,7 +55,7 @@ export default function AuthPage() {
     }
     if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) newErrors.email = 'Valid email is required';
     if (!form.password || form.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -108,12 +108,12 @@ export default function AuthPage() {
         <div className="absolute inset-0 bg-gradient-to-t from-brand-dark via-brand-dark/80 to-transparent"></div>
         <div className="absolute bottom-12 left-12 right-12 text-white">
           <h1 className="text-4xl font-serif font-bold leading-tight mb-4 text-brand-neutral">
-            {isLogin 
-              ? "Welcome Back to Viridian Nexus." 
+            {isLogin
+              ? "Welcome Back to Viridian Nexus."
               : "Redefining Elite Living across Bangladesh."}
           </h1>
           <p className="text-lg text-brand-neutral/80 max-w-lg mb-6">
-            {isLogin 
+            {isLogin
               ? "Access your exclusive dashboard to monitor your properties, track project progress in real-time, and manage your financial installments."
               : "Join our exclusive community to secure your premium property, manage wishlists, and experience absolute transparency in real estate."}
           </p>
@@ -126,19 +126,19 @@ export default function AuthPage() {
       {/* Right side - Form */}
       <div className="w-full lg:w-1/2 flex items-start justify-center p-6 py-8 lg:p-12 relative overflow-y-auto max-h-[calc(100vh-80px)]">
         <Link to="/" className="absolute top-6 left-6 lg:hidden flex items-center gap-2">
-           <div className="w-8 h-8 bg-brand-primary rounded-sm flex items-center justify-center border border-brand-accent/50">
-             <span className="text-brand-accent font-serif font-bold text-lg">V</span>
-           </div>
+          <div className="w-8 h-8 bg-brand-primary rounded-sm flex items-center justify-center border border-brand-accent/50">
+            <span className="text-brand-accent font-serif font-bold text-lg">V</span>
+          </div>
         </Link>
-        
+
         <div className="max-w-md w-full my-auto pb-12">
           <div className="text-center mb-8">
             <h2 className="text-3xl font-serif font-bold text-brand-dark mb-3">
               {isLogin ? 'Secure Client Portal' : 'Exclusive Membership'}
             </h2>
             <p className="text-sm text-gray-500 leading-relaxed">
-              {isLogin 
-                ? 'Access your encrypted portfolio, track property progress, and manage your real estate investments with industry-leading security.' 
+              {isLogin
+                ? 'Access your encrypted portfolio, track property progress, and manage your real estate investments with industry-leading security.'
                 : 'Join Viridian Nexus. Your data is encrypted and stored with bank-grade security standards. Experience real estate management redefined.'}
             </p>
           </div>

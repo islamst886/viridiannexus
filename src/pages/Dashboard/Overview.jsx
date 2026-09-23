@@ -12,13 +12,15 @@ export default function Overview() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
   const navigate = useNavigate();
 
   const currentUser = auth.currentUser;
 
   useEffect(() => {
-    if (!userProfile?.uid) return;
+    if (!userProfile?.uid) {
+      setLoading(false);
+      return;
+    }
     
     const q = query(collection(db, 'bookings'), where('linkedUserId', '==', userProfile.uid));
     const unsub = onSnapshot(q, (snap) => {
@@ -32,14 +34,6 @@ export default function Overview() {
   const formatMoney = (amount) => {
     if (amount === undefined || amount === null) return '৳0';
     return '৳ ' + Math.round(Number(amount)).toLocaleString('en-IN');
-  };
-
-  const copyReferralCode = () => {
-    const code = userProfile?.referralCode || userProfile?.uid?.slice(0, 8).toUpperCase() || 'REF123';
-    navigator.clipboard.writeText(code);
-    setCopiedCode(true);
-    toast.success("Referral code copied to clipboard!");
-    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   const memberSince = userProfile?.createdAt?.toDate
@@ -132,25 +126,23 @@ export default function Overview() {
           </div>
 
           {/* Referral Card */}
-          <div className="bg-brand-dark rounded-2xl shadow-sm p-6 sm:p-7 border border-brand-dark text-white relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-brand-dark rounded-2xl shadow-sm p-6 sm:p-7 border border-brand-dark text-white relative overflow-hidden flex flex-col justify-between opacity-90">
             <div className="absolute -right-4 -top-4 opacity-10 pointer-events-none">
               <CheckCircle size={140} />
             </div>
             <div>
-              <h3 className="text-lg font-bold font-serif mb-2 relative z-10 text-brand-accent">Refer & Earn</h3>
+              <div className="flex justify-between items-start mb-2 relative z-10">
+                <h3 className="text-lg font-bold font-serif text-brand-accent">Refer & Earn</h3>
+                <span className="bg-white/10 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider border border-white/20 flex items-center gap-1">
+                  <Clock size={10} /> Coming Soon
+                </span>
+              </div>
               <p className="text-sm text-gray-300 mb-4 relative z-10">Invite friends and earn up to ৳100,000 on their first successful booking.</p>
             </div>
-            <div className="bg-black/40 backdrop-blur-sm p-3.5 rounded-xl flex justify-between items-center border border-white/15 relative z-10">
-              <span className="font-mono font-bold tracking-widest text-brand-accent">
-                {userProfile?.referralCode || userProfile?.uid?.slice(0, 8).toUpperCase() || 'REF123'}
-              </span>
-              <button
-                onClick={copyReferralCode}
-                className="p-1.5 hover:bg-white/10 text-brand-accent hover:text-white rounded-lg transition-colors"
-                title="Copy Referral Code"
-              >
-                {copiedCode ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
-              </button>
+            <div className="bg-black/20 backdrop-blur-sm p-3.5 rounded-xl flex justify-center items-center border border-white/10 relative z-10">
+               <span className="text-sm font-medium text-gray-400 flex items-center gap-2">
+                 Feature in development
+               </span>
             </div>
           </div>
         </div>

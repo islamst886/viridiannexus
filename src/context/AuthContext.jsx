@@ -24,6 +24,9 @@ export const AuthProvider = ({ children }) => {
       case 'auth/email-already-in-use': return 'An account with this email already exists.';
       case 'auth/wrong-password': return 'Incorrect password. Please try again.';
       case 'auth/user-not-found': return 'No account found with this email.';
+      case 'auth/invalid-credential':
+      case 'auth/invalid-login-credentials':
+        return 'Invalid email or password. Please try again.';
       case 'auth/too-many-requests': return 'Too many attempts. Please wait and try again.';
       case 'auth/network-request-failed': return 'Network error. Check your connection.';
       case 'auth/requires-recent-login': return 'This action requires recent authentication. Please log out and sign in again.';

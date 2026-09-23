@@ -19,7 +19,10 @@ export default function BookingDetail() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!userProfile?.uid) return;
+    if (!userProfile?.uid) {
+      navigate('/dashboard');
+      return;
+    }
 
     // 1. Fetch Booking and verify ownership
     const bSub = onSnapshot(doc(db, 'bookings', bookingId), (docSnap) => {
