@@ -35,7 +35,7 @@ const AMENITY_ICONS = {
   'Jacuzzi': Bath
 };
 
-import { useParams, Navigate, Link } from 'react-router-dom';
+import { useParams, Navigate, Link, useLocation } from 'react-router-dom';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -68,8 +68,9 @@ class ErrorBoundary extends React.Component {
 }
 
 function ProjectContent() {
-  const { toggleWishlist, wishlist, properties, loadingProperties } = useGlobalState();
+  const { toggleWishlist, wishlist, properties, loadingProperties, isLoggedIn, userProfile } = useGlobalState();
   const [activeFloorPlan, setActiveFloorPlan] = useState('Type A');
+  const location = useLocation();
 
   const getEmbedUrl = (url) => {
     if (!url) return '';
@@ -92,6 +93,17 @@ function ProjectContent() {
   // Inquiry Form State
   const [inquiryData, setInquiryData] = useState({ name: '', phone: '', email: '', message: '' });
   const [submittingInquiry, setSubmittingInquiry] = useState(false);
+
+  useEffect(() => {
+    if (isLoggedIn && userProfile) {
+      setInquiryData(prev => ({
+        ...prev,
+        name: userProfile.displayName || '',
+        phone: userProfile.phone || '',
+        email: userProfile.email || ''
+      }));
+    }
+  }, [isLoggedIn, userProfile]);
 
   const handleInquirySubmit = async (e) => {
     e.preventDefault();
@@ -135,6 +147,15 @@ function ProjectContent() {
 
   const isSaved = wishlist.some(p => p.id === projectData.id);
 
+  const displayStatus = React.useMemo(() => {
+    if (!projectData) return '';
+    if (projectData.inventory && projectData.inventory.length > 0) {
+      const hasAvailable = projectData.inventory.some(inv => inv.status === 'Available');
+      if (!hasAvailable) return 'Sold Out';
+    }
+    return projectData.status;
+  }, [projectData]);
+
   return (
     <div className="bg-brand-neutral min-h-screen pb-20">
       
@@ -149,7 +170,7 @@ function ProjectContent() {
           <div className="text-white w-full md:w-2/3">
             <div className="flex flex-wrap gap-3 mb-4">
               <span className="inline-block bg-brand-primary text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-sm shadow-sm">
-                {projectData.status}
+                {displayStatus}
               </span>
               {projectData.completionDate && (
                 <span className="inline-flex items-center gap-1 bg-white/20 backdrop-blur-md text-white text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-sm shadow-sm border border-white/10">
@@ -466,15 +487,25 @@ function ProjectContent() {
               </div>
               <p className="text-sm text-brand-text/80 mb-6 text-center">Share your details and our team will reach out to help you find your perfect home in {projectData.name}.</p>
               
+              {!isLoggedIn && (
+                <div className="bg-brand-primary/10 border border-brand-primary/20 p-4 mb-6 rounded text-xs text-brand-dark text-center">
+                  <span className="font-semibold text-brand-primary">Have an account? </span>
+                  <Link to={`/auth?redirect=${encodeURIComponent(location.pathname)}`} className="font-bold text-brand-primary hover:underline underline-offset-2">
+                    Sign in
+                  </Link>
+                  <span> to automatically link this inquiry to your profile.</span>
+                </div>
+              )}
+
               <form className="space-y-4" onSubmit={handleInquirySubmit}>
                 <div>
-                  <input type="text" required value={inquiryData.name} onChange={(e) => setInquiryData(p => ({...p, name: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm" placeholder="Full Name*" />
+                  <input type="text" required value={inquiryData.name} onChange={(e) => setInquiryData(p => ({...p, name: e.target.value}))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Full Name*" />
                 </div>
                 <div>
-                  <input type="tel" required value={inquiryData.phone} onChange={(e) => setInquiryData(p => ({...p, phone: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm" placeholder="Phone Number*" />
+                  <input type="tel" required value={inquiryData.phone} onChange={(e) => setInquiryData(p => ({...p, phone: e.target.value}))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Phone Number*" />
                 </div>
                 <div>
-                  <input type="email" required value={inquiryData.email} onChange={(e) => setInquiryData(p => ({...p, email: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm" placeholder="Email Address*" />
+                  <input type="email" required value={inquiryData.email} onChange={(e) => setInquiryData(p => ({...p, email: e.target.value}))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Email Address*" />
                 </div>
                 <div>
                   <textarea rows="4" required value={inquiryData.message} onChange={(e) => setInquiryData(p => ({...p, message: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm resize-none" placeholder="Message*" />

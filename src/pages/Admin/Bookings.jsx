@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, serverTimestamp, runTransaction, getDocs, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, setDoc, serverTimestamp, runTransaction, getDocs, where } from 'firebase/firestore';
 import { useGlobalState } from '../../context/GlobalState';
 import AdminSidebar from '../../components/AdminSidebar';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, ArrowRight, Loader2, X, ChevronRight, CheckCircle, FileText } from 'lucide-react';
+import { Plus, Search, Filter, ArrowRight, Loader2, X, ChevronRight, CheckCircle, FileText, Info, ShieldCheck } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 export default function AdminBookings() {
@@ -27,7 +27,14 @@ export default function AdminBookings() {
     valueCollected: 0
   });
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(() => {
+    const saved = sessionStorage.getItem('admin_booking_modal_open');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem('admin_booking_modal_open', JSON.stringify(isModalOpen));
+  }, [isModalOpen]);
 
   useEffect(() => {
     // Fetch Bookings
@@ -57,7 +64,7 @@ export default function AdminBookings() {
 
   const formatMoney = (amount) => {
     if (amount === undefined || amount === null) return '৳0';
-    return '৳ ' + amount.toLocaleString('en-IN');
+    return '৳ ' + Math.round(Number(amount)).toLocaleString('en-IN');
   };
 
   const getStageColor = (stage) => {
@@ -77,10 +84,26 @@ export default function AdminBookings() {
   };
 
   const filteredBookings = bookings.filter(b => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) {
+      const matchesStage = filterStage === 'All' || b.stage === filterStage;
+      const matchesStatus = filterStatus === 'All' || b.status === filterStatus;
+      return matchesStage && matchesStatus;
+    }
+
+    const cleanTerm = term.replace(/^id:\s*/i, '').trim();
+
     const matchesSearch = 
-      (b.clientName?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (b.bookingRef?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (b.propertyName?.toLowerCase().includes(searchTerm.toLowerCase()));
+      (b.clientName?.toLowerCase().includes(term)) ||
+      (b.clientEmail?.toLowerCase().includes(term)) ||
+      (b.clientPhone?.toLowerCase().includes(term)) ||
+      (b.bookingRef?.toLowerCase().includes(term)) ||
+      (b.propertyName?.toLowerCase().includes(term)) ||
+      (b.linkedUserId?.toLowerCase().includes(cleanTerm)) ||
+      (b.clientId?.toLowerCase().includes(cleanTerm)) ||
+      (b.clientNid?.toLowerCase().includes(cleanTerm)) ||
+      (b.unitNumber?.toLowerCase().includes(cleanTerm));
+
     const matchesStage = filterStage === 'All' || b.stage === filterStage;
     const matchesStatus = filterStatus === 'All' || b.status === filterStatus;
     return matchesSearch && matchesStage && matchesStatus;
@@ -132,7 +155,7 @@ export default function AdminBookings() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                 <input
                   type="text"
-                  placeholder="Search name, ref, or property..."
+                  placeholder="Search client name, ID, email, phone, or ref..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/50 text-sm"
@@ -200,7 +223,12 @@ export default function AdminBookings() {
                     <tr key={b.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => navigate(`/admin/bookings/${b.id}`)}>
                       <td className="p-4">
                         <div className="font-semibold text-gray-900">{b.bookingRef}</div>
-                        <div className="text-sm text-gray-500">{b.clientName}</div>
+                        <div className="text-sm text-gray-700 font-medium">{b.clientName}</div>
+                        {(b.linkedUserId || b.clientId) && (
+                          <div className="text-[11px] font-mono text-gray-400 mt-0.5">
+                            ID: {(b.linkedUserId || b.clientId).slice(0, 8).toUpperCase()}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4">
                         <div className="font-medium text-gray-900">{b.propertyName}</div>
@@ -256,31 +284,51 @@ export default function AdminBookings() {
 
 function NewBookingModal({ onClose, properties, adminName, adminUid }) {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
-  
-  const [form, setForm] = useState({
-    propertyId: '',
-    unitType: '',
-    unitNumber: '',
-    
-    clientName: '',
-    clientEmail: '',
-    clientPhone: '',
-    clientNid: '',
-    clientAddress: '',
-    linkedUserId: null, // UID if linked
-    
-    totalPrice: '',
-    tokenAmount: '',
-    downPaymentAmount: '',
-    installmentPlan: 'Custom',
-    installmentCount: '',
-    installmentStartDate: '',
-    installmentFrequency: 'Monthly',
-    
-    notes: ''
+
+  const [step, setStep] = useState(() => {
+    const saved = sessionStorage.getItem('admin_booking_step');
+    return saved ? JSON.parse(saved) : 1;
   });
+  
+  const [form, setForm] = useState(() => {
+    const saved = sessionStorage.getItem('admin_booking_form');
+    return saved ? JSON.parse(saved) : {
+      propertyId: '',
+      inventoryId: '',
+      unitType: '',
+      unitNumber: '',
+      clientName: '',
+      clientEmail: '',
+      clientPhone: '',
+      clientNidType: 'NID',
+      clientNid: '',
+      clientAddress: '',
+      linkedUserId: null,
+      totalPrice: '',
+      tokenAmount: '',
+      downPaymentAmount: '',
+      installmentPlan: 'Custom',
+      installmentCount: '',
+      installmentStartDate: '',
+      installmentFrequency: 'Monthly',
+      notes: ''
+    };
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem('admin_booking_step', JSON.stringify(step));
+  }, [step]);
+
+  useEffect(() => {
+    sessionStorage.setItem('admin_booking_form', JSON.stringify(form));
+  }, [form]);
+
+  const clearSessionData = () => {
+    sessionStorage.removeItem('admin_booking_step');
+    sessionStorage.removeItem('admin_booking_form');
+    sessionStorage.removeItem('admin_booking_modal_open');
+  };
 
   const [linkSearch, setLinkSearch] = useState('');
   const [linkResult, setLinkResult] = useState(null);
@@ -317,7 +365,10 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
         linkedUserId: linkResult.id,
         clientName: prev.clientName || linkResult.displayName,
         clientEmail: linkResult.email,
-        clientPhone: prev.clientPhone || linkResult.phone
+        clientPhone: prev.clientPhone || linkResult.phone,
+        clientNidType: linkResult.nidType || prev.clientNidType || 'NID',
+        clientNid: prev.clientNid || linkResult.nid || '',
+        clientAddress: prev.clientAddress || linkResult.address || ''
       }));
       toast.success("Account linked successfully.");
     }
@@ -326,14 +377,22 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
   const nextStep = () => {
     // Validation
     if (step === 1) {
-      if (!form.propertyId || !form.unitType) return toast.error("Please select a property and unit type.");
+      if (!form.propertyId || !form.inventoryId) return toast.error("Please select a property and a specific unit.");
     }
     if (step === 2) {
+      if (!form.linkedUserId) return toast.error("Linking a user account is mandatory.");
       if (!form.clientName || !form.clientEmail || !form.clientPhone) return toast.error("Client name, email, and phone are required.");
+      if (!form.clientNid) return toast.error(`${form.clientNidType} number is required.`);
+      if (!form.clientAddress) return toast.error("Current Address is required.");
     }
     if (step === 3) {
       if (!form.totalPrice || !form.tokenAmount) return toast.error("Total price and token amount are required.");
       if (Number(form.tokenAmount) > Number(form.totalPrice)) return toast.error("Token cannot exceed total price.");
+      if (!form.downPaymentAmount) return toast.error("Down payment is required. Enter 0 if none.");
+      
+      if (!form.installmentCount) return toast.error("Total installments count is required.");
+      if (!form.installmentStartDate) return toast.error("Installment start date is required.");
+      if (!form.installmentFrequency) return toast.error("Installment frequency is required.");
     }
     setStep(s => s + 1);
   };
@@ -345,16 +404,37 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
       const counterRef = doc(db, 'meta', 'bookingCounter');
       
       const newBookingId = await runTransaction(db, async (transaction) => {
+        // --- READS ---
         const counterDoc = await transaction.get(counterRef);
+        
+        const propertyRef = doc(db, 'properties', form.propertyId);
+        const propertyDoc = await transaction.get(propertyRef);
+        if (!propertyDoc.exists()) throw new Error("Property not found");
+
+        // --- PROCESSING & WRITES ---
         let currentVal = 1;
         if (counterDoc.exists()) {
           currentVal = counterDoc.data().value + 1;
         }
-        transaction.set(counterRef, { value: currentVal }, { merge: true });
         
         const year = new Date().getFullYear();
         const paddedNum = String(currentVal).padStart(4, '0');
         const bookingRef = `VN-${year}-${paddedNum}`;
+
+        const propertyData = propertyDoc.data();
+        let inventory = propertyData.inventory || [];
+        const invIndex = inventory.findIndex(inv => inv.id === form.inventoryId);
+        
+        if (invIndex === -1) throw new Error("Selected unit not found in inventory.");
+        if (inventory[invIndex].status !== 'Available') {
+          throw new Error(`This unit is no longer available (Current status: ${inventory[invIndex].status}). Someone may have booked it just now.`);
+        }
+        
+        // Perform Writes
+        transaction.set(counterRef, { value: currentVal }, { merge: true });
+
+        inventory[invIndex].status = 'Booked';
+        transaction.update(propertyRef, { inventory });
 
         // 2. Create the main booking document
         const bookingRefDoc = doc(collection(db, 'bookings'));
@@ -369,17 +449,22 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
           propertyId: form.propertyId,
           propertyName: currentProperty.name,
           propertyLocation: currentProperty.location,
-          unitType: form.unitType,
-          unitNumber: form.unitNumber,
+          inventoryId: form.inventoryId,
+          unitType: inventory[invIndex].unitType || '',
+          unitNumber: `Floor ${inventory[invIndex].floor || ''}, ${
+            (inventory[invIndex].unitType || '').toLowerCase().includes((inventory[invIndex].unitName || '').toLowerCase()) 
+            ? (inventory[invIndex].unitName || '') 
+            : `Unit ${inventory[invIndex].unitName || ''}`
+          }`,
           
           totalPrice: Number(form.totalPrice),
           tokenAmount: Number(form.tokenAmount),
           downPaymentAmount: Number(form.downPaymentAmount || 0),
-          totalPaid: 0, // Admin must record the payment later to update this
+          totalPaid: 0, 
           balanceDue: Number(form.totalPrice),
-          installmentPlan: form.installmentPlan,
+          installmentPlan: form.installmentPlan || 'Custom',
           
-          stage: 'Token Paid',
+          stage: 'EOI',
           status: 'Active',
           cancellationReason: null,
           refundAmount: null,
@@ -389,7 +474,7 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
           createdBy: adminUid,
           lastUpdatedAt: serverTimestamp(),
           lastUpdatedBy: adminUid,
-          internalNotes: form.notes
+          internalNotes: form.notes || ''
         };
         transaction.set(bookingRefDoc, bookingData);
 
@@ -466,10 +551,27 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
           });
 
           // Advance date
-          if (form.installmentFrequency === 'Monthly') {
-            currentDate.setMonth(currentDate.getMonth() + 1);
-          } else if (form.installmentFrequency === 'Quarterly') {
-            currentDate.setMonth(currentDate.getMonth() + 3);
+          switch (form.installmentFrequency) {
+            case 'Monthly':
+              currentDate.setMonth(currentDate.getMonth() + 1);
+              break;
+            case 'Bi-Monthly':
+              currentDate.setMonth(currentDate.getMonth() + 2);
+              break;
+            case 'Quarterly':
+              currentDate.setMonth(currentDate.getMonth() + 3);
+              break;
+            case 'Tri-Annual':
+              currentDate.setMonth(currentDate.getMonth() + 4);
+              break;
+            case 'Semi-Annual':
+              currentDate.setMonth(currentDate.getMonth() + 6);
+              break;
+            case 'Annual':
+              currentDate.setMonth(currentDate.getMonth() + 12);
+              break;
+            default:
+              currentDate.setMonth(currentDate.getMonth() + 1);
           }
         }
       }
@@ -484,12 +586,17 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
       }
 
       toast.success("Booking created successfully!");
+      clearSessionData();
       onClose();
       navigate(`/admin/bookings/${newBookingId}`);
 
     } catch (err) {
       console.error(err);
-      toast.error("Failed to create booking.");
+      if (err.message && (err.message.includes("no longer available") || err.message.includes("not found"))) {
+        toast.error(err.message);
+      } else {
+        toast.error(`Failed to create booking: ${err.message || 'Unknown error'}`);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -512,12 +619,24 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
     </div>
   );
 
+  const handleClose = () => {
+    if (step > 1 || form.propertyId || form.clientName || form.clientEmail) {
+      if (window.confirm("Are you sure you want to discard this booking? All unsaved data will be lost.")) {
+        clearSessionData();
+        onClose();
+      }
+    } else {
+      clearSessionData();
+      onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl relative">
         <div className="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl">
           <h2 className="text-xl font-bold font-serif text-gray-900">Create New Booking</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
+          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
         </div>
 
         <div className="p-8 overflow-y-auto flex-1">
@@ -540,33 +659,31 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
                 </select>
               </div>
               
-              {currentProperty && (
+              {currentProperty && currentProperty.inventory && currentProperty.inventory.length > 0 ? (
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Unit Type *</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Select Specific Unit *</label>
                   <select 
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary/50"
-                    value={form.unitType}
-                    onChange={(e) => setForm({...form, unitType: e.target.value})}
+                    value={form.inventoryId}
+                    onChange={(e) => setForm({...form, inventoryId: e.target.value})}
                   >
-                    <option value="">Select Unit Type</option>
-                    {unitOptions.map((u, i) => (
-                      <option key={i} value={`${u.name} - ${u.size}`}>{u.name} - {u.size}</option>
-                    ))}
-                    {unitOptions.length === 0 && <option value="Standard Unit">Standard Unit</option>}
+                    <option value="">Select an available unit...</option>
+                    {currentProperty.inventory.filter(inv => inv.status === 'Available').map(inv => {
+                      const isRedundant = inv.unitType.toLowerCase().includes(inv.unitName.toLowerCase());
+                      return (
+                        <option key={inv.id} value={inv.id}>
+                          Floor {inv.floor} - {isRedundant ? inv.unitType : `Unit ${inv.unitName} (${inv.unitType})`}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Unit Number (Optional)</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Floor 12, Flat A" 
-                  className="w-full p-3 border border-gray-300 rounded-lg"
-                  value={form.unitNumber}
-                  onChange={(e) => setForm({...form, unitNumber: e.target.value})}
-                />
-              </div>
+              ) : currentProperty ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm">
+                  <p className="font-bold flex items-center gap-1"><X size={16} /> No Exact Inventory Defined</p>
+                  <p className="mt-1">You must define specific units for this property in the Admin Panel before creating bookings.</p>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -574,34 +691,49 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
               <h3 className="text-lg font-bold border-b pb-2 mb-4">Client Information</h3>
               
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
-                <label className="block text-sm font-bold text-blue-900 mb-2">Link User Account (Optional)</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="email" 
-                    placeholder="Search by registered email..." 
-                    className="flex-1 p-2 border border-blue-200 rounded-lg text-sm"
-                    value={linkSearch}
-                    onChange={(e) => setLinkSearch(e.target.value)}
-                  />
-                  <button onClick={handleLinkSearch} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold flex items-center">
-                    {searchingLink ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                  </button>
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex flex-col gap-3">
+                <div className="flex items-center gap-2 text-blue-800 font-bold">
+                  <ShieldCheck size={20} /> Link User Account (Mandatory)
                 </div>
-                {linkResult && (
-                  <div className="mt-3 flex items-center justify-between bg-white p-3 rounded border border-blue-200">
+                <p className="text-xs text-blue-700">A verified user account is required to grant the client access to the user dashboard.</p>
+                
+                {form.linkedUserId ? (
+                  <div className="bg-white p-3 rounded border border-blue-100 flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-bold">{linkResult.displayName}</p>
-                      <p className="text-xs text-gray-500">{linkResult.email}</p>
+                      <p className="font-bold text-gray-900">{form.clientName}</p>
+                      <p className="text-xs text-gray-500">{form.clientEmail}</p>
                     </div>
-                    <button onClick={confirmLink} className="text-sm text-blue-600 font-bold hover:underline">
-                      Link Account
+                    <button onClick={() => setForm({...form, linkedUserId: null})} className="text-red-500 text-xs font-bold hover:underline">Unlink</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input 
+                      type="email" 
+                      placeholder="Search user by exact email..." 
+                      className="flex-1 p-2 border border-blue-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      value={linkSearch}
+                      onChange={e => setLinkSearch(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleLinkSearch()}
+                    />
+                    <button 
+                      onClick={handleLinkSearch}
+                      disabled={searchingLink || !linkSearch}
+                      className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {searchingLink ? 'Searching...' : 'Search'}
                     </button>
                   </div>
                 )}
-                {form.linkedUserId && (
-                  <div className="mt-2 text-sm text-green-700 font-bold flex items-center gap-1">
-                    <CheckCircle size={16} /> Account Linked successfully
+                
+                {linkResult && !form.linkedUserId && (
+                  <div className="mt-2 bg-white p-3 rounded border border-blue-100 flex items-center justify-between animate-in fade-in">
+                    <div>
+                      <p className="font-bold text-gray-900">{linkResult.displayName}</p>
+                      <p className="text-xs text-gray-500">{linkResult.email}</p>
+                    </div>
+                    <button onClick={confirmLink} className="px-3 py-1 bg-green-100 text-green-700 font-bold rounded text-xs hover:bg-green-200">
+                      Confirm Link
+                    </button>
                   </div>
                 )}
               </div>
@@ -619,13 +751,23 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
                   <label className="block text-sm font-bold text-gray-700 mb-2">Email *</label>
                   <input type="email" className="w-full p-3 border rounded-lg" value={form.clientEmail} onChange={e => setForm({...form, clientEmail: e.target.value})} />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">NID / Passport</label>
-                  <input type="text" className="w-full p-3 border rounded-lg" value={form.clientNid} onChange={e => setForm({...form, clientNid: e.target.value})} />
+                <div className="col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Identity Document *</label>
+                  <div className="flex gap-2">
+                    <select 
+                      className="w-1/3 p-3 border rounded-lg bg-gray-50 font-bold"
+                      value={form.clientNidType} 
+                      onChange={e => setForm({...form, clientNidType: e.target.value})}
+                    >
+                      <option value="NID">NID</option>
+                      <option value="Passport">Passport</option>
+                    </select>
+                    <input type="text" placeholder={`Enter ${form.clientNidType} Number`} className="w-2/3 p-3 border rounded-lg" value={form.clientNid} onChange={e => setForm({...form, clientNid: e.target.value})} />
+                  </div>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Current Address</label>
-                  <textarea className="w-full p-3 border rounded-lg" rows="2" value={form.clientAddress} onChange={e => setForm({...form, clientAddress: e.target.value})} />
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Current Address *</label>
+                  <textarea className="w-full p-3 border rounded-lg" rows="2" value={form.clientAddress} onChange={e => setForm({...form, clientAddress: e.target.value})}></textarea>
                 </div>
               </div>
             </div>
@@ -636,39 +778,60 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
               <h3 className="text-lg font-bold border-b pb-2 mb-4">Financial Agreement</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Total Agreed Price (BDT) *</label>
+                  <label className="flex items-center gap-1 text-sm font-bold text-gray-700 mb-2 relative group w-max">
+                    Total Agreed Price (BDT) *
+                    <Info size={14} className="text-gray-400 cursor-help" />
+                    <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-brand-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg text-left font-normal whitespace-normal">
+                      The final, fully negotiated total price for this property unit.
+                    </div>
+                  </label>
                   <input type="number" className="w-full p-3 border rounded-lg bg-gray-50 font-bold text-lg" value={form.totalPrice} onChange={e => setForm({...form, totalPrice: e.target.value})} />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Token Amount *</label>
+                  <label className="flex items-center gap-1 text-sm font-bold text-gray-700 mb-2 relative group w-max">
+                    Token Amount *
+                    <Info size={14} className="text-gray-400 cursor-help" />
+                    <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-brand-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg text-left font-normal whitespace-normal">
+                      The initial booking money or token advance paid by the client to reserve the unit.
+                    </div>
+                  </label>
                   <input type="number" className="w-full p-3 border rounded-lg" value={form.tokenAmount} onChange={e => setForm({...form, tokenAmount: e.target.value})} />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Down Payment</label>
+                  <label className="flex items-center gap-1 text-sm font-bold text-gray-700 mb-2 relative group w-max">
+                    Down Payment *
+                    <Info size={14} className="text-gray-400 cursor-help" />
+                    <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-brand-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg text-left font-normal whitespace-normal">
+                      The lump-sum amount (excluding token) required before standard installments begin. Enter 0 if none.
+                    </div>
+                  </label>
                   <input type="number" className="w-full p-3 border rounded-lg" value={form.downPaymentAmount} onChange={e => setForm({...form, downPaymentAmount: e.target.value})} />
                 </div>
               </div>
 
               <div className="border-t pt-4 mt-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Generate Installment Schedule?</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Installment Schedule *</label>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Total Installments</label>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Total Installments *</label>
                     <input type="number" placeholder="e.g. 24" className="w-full p-3 border rounded-lg text-sm" value={form.installmentCount} onChange={e => setForm({...form, installmentCount: e.target.value})} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Start Date</label>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Start Date *</label>
                     <input type="date" className="w-full p-3 border rounded-lg text-sm" value={form.installmentStartDate} onChange={e => setForm({...form, installmentStartDate: e.target.value})} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Frequency</label>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Frequency *</label>
                     <select className="w-full p-3 border rounded-lg text-sm" value={form.installmentFrequency} onChange={e => setForm({...form, installmentFrequency: e.target.value})}>
                       <option value="Monthly">Monthly</option>
-                      <option value="Quarterly">Quarterly</option>
+                      <option value="Bi-Monthly">Bi-Monthly (Every 2 Months)</option>
+                      <option value="Quarterly">Quarterly (Every 3 Months)</option>
+                      <option value="Tri-Annual">Tri-Annual (Every 4 Months)</option>
+                      <option value="Semi-Annual">Semi-Annual (Every 6 Months)</option>
+                      <option value="Annual">Annual (Every 12 Months)</option>
                     </select>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">Leave count blank to not generate scheduled installments.</p>
               </div>
             </div>
           )}

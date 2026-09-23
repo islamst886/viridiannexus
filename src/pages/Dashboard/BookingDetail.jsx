@@ -46,7 +46,7 @@ export default function BookingDetail() {
 
   const formatMoney = (amount) => {
     if (amount === undefined || amount === null) return '৳0';
-    return '৳ ' + amount.toLocaleString('en-IN');
+    return '৳ ' + Math.round(Number(amount)).toLocaleString('en-IN');
   };
 
   const formatDate = (ts) => {
@@ -65,11 +65,8 @@ export default function BookingDetail() {
 
   const completionPct = Math.min(100, Math.round(((booking.totalPaid || 0) / booking.totalPrice) * 100));
 
-  // Only show past payments and next immediate payment to user
-  const visiblePayments = payments.filter(p => p.status !== 'Scheduled' || p.status === 'Scheduled');
-  
-  // Find next upcoming payment
-  const upcomingPayment = payments.find(p => p.status === 'Scheduled' && (p.scheduledDate.toDate ? p.scheduledDate.toDate() : new Date(p.scheduledDate)) >= new Date());
+  // Find the next payment that needs to be paid (whether it's in the future or currently overdue)
+  const upcomingPayment = payments.find(p => p.status === 'Scheduled');
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 font-sans">
@@ -136,10 +133,10 @@ export default function BookingDetail() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {visiblePayments.length === 0 ? (
+                    {payments.length === 0 ? (
                       <tr><td colSpan={4} className="text-center py-8 text-gray-500">No payment records found</td></tr>
                     ) : (
-                      visiblePayments.map((p) => {
+                      payments.map((p) => {
                         const isOverdue = p.status === 'Scheduled' && (p.scheduledDate.toDate ? p.scheduledDate.toDate() : new Date(p.scheduledDate)) < new Date();
                         let statusBadge = '';
                         if (p.status === 'Paid') statusBadge = 'bg-green-100 text-green-800';

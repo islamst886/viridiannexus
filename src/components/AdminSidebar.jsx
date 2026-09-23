@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, Home, MessageSquare, ExternalLink, CalendarCheck, Clock, Users } from 'lucide-react';
+import { LogOut, Home, MessageSquare, ExternalLink, CalendarCheck, Clock, Users, Mail } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useGlobalState } from '../context/GlobalState';
@@ -41,7 +41,10 @@ export default function AdminSidebar() {
     navigate('/admin');
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (path === '/admin' || path === '/admin/dashboard') return location.pathname === path;
+    return location.pathname.startsWith(path);
+  };
 
   return (
     <div className="w-64 bg-brand-dark text-white p-6 flex flex-col h-screen sticky top-0">
@@ -65,12 +68,7 @@ export default function AdminSidebar() {
         >
           <CalendarCheck size={20} /> Bookings
         </button>
-        <button 
-          onClick={() => handleNavigation('/admin/booking-requests')}
-          className={`w-full text-left flex items-center gap-3 p-3 rounded font-bold transition-colors ${isActive('/admin/booking-requests') ? 'bg-brand-primary text-brand-neutral' : 'text-brand-neutral/70 hover:bg-brand-primary/20 hover:text-white'}`}
-        >
-          <Clock size={20} /> Booking Requests
-        </button>
+
         <button 
           onClick={() => handleNavigation('/admin/progress')}
           className={`w-full text-left flex items-center gap-3 p-3 rounded font-bold transition-colors ${isActive('/admin/progress') ? 'bg-brand-primary text-brand-neutral' : 'text-brand-neutral/70 hover:bg-brand-primary/20 hover:text-white'}`}
@@ -81,7 +79,7 @@ export default function AdminSidebar() {
           onClick={() => handleNavigation('/admin/newsletter')}
           className={`w-full text-left flex items-center gap-3 p-3 rounded font-bold transition-colors ${isActive('/admin/newsletter') ? 'bg-brand-primary text-brand-neutral' : 'text-brand-neutral/70 hover:bg-brand-primary/20 hover:text-white'}`}
         >
-          <Users size={20} /> Newsletter
+          <Mail size={20} /> Newsletter
         </button>
         {isSuperAdmin && (
           <button 

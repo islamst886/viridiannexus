@@ -217,7 +217,8 @@ export default function Projects() {
         p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.location?.toLowerCase().includes(searchTerm.toLowerCase());
       const com    = selectedCommunities.length === 0 || selectedCommunities.includes(p.location);
-      const status = selectedStatus.length === 0 || selectedStatus.includes(p.status);
+      const dStatus = (p.inventory && p.inventory.length > 0 && !p.inventory.some(inv => inv.status === 'Available')) ? 'Sold Out' : p.status;
+      const status = selectedStatus.length === 0 || selectedStatus.includes(dStatus);
       const type   = selectedTypes.length === 0 || selectedTypes.includes(p.propertyType);
       const price  = activePriceRanges.length === 0 || (() => {
         const val = parsePriceTk(p.price);
@@ -341,11 +342,13 @@ export default function Projects() {
                       />
                       <span style={{
                         position: 'absolute', top: '12px', right: '12px',
-                        background: badgeColor(property.status), color: '#fff',
+                        background: badgeColor(
+                          (property.inventory && property.inventory.length > 0 && !property.inventory.some(inv => inv.status === 'Available')) ? 'Sold Out' : property.status
+                        ), color: '#fff',
                         fontSize: '10px', fontWeight: '800', letterSpacing: '0.08em', textTransform: 'uppercase',
                         padding: '4px 10px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
                       }}>
-                        {property.status || 'Upcoming'}
+                        {((property.inventory && property.inventory.length > 0 && !property.inventory.some(inv => inv.status === 'Available')) ? 'Sold Out' : property.status) || 'Upcoming'}
                       </span>
                     </div>
 

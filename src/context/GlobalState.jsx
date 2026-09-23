@@ -18,9 +18,9 @@ export const GlobalStateProvider = ({ children }) => {
   const [adminUnsavedChanges, setAdminUnsavedChanges] = useState(false);
 
   useEffect(() => {
-    let unsubProfile = () => {};
-    let unsubWishlist = () => {};
-    let unsubNotifications = () => {};
+    let unsubProfile = () => { };
+    let unsubWishlist = () => { };
+    let unsubNotifications = () => { };
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);

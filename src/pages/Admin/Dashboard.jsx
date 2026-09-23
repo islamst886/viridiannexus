@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../../firebase';
-import { collection, getDocs, deleteDoc, doc, query, where, sum, getAggregateFromServer } from 'firebase/firestore';
+import { db } from '../../firebase';
+import { collection, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import { Plus, Edit, Trash2, Users, Building, DollarSign } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -14,41 +14,43 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchProperties();
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      // Users
-      const uSnap = await getDocs(collection(db, 'users'));
-      const totalUsers = uSnap.size;
-      
-      // Bookings Value
-      const bSnap = await getDocs(collection(db, 'bookings'));
-      const totalValue = bSnap.docs.reduce((acc, curr) => acc + (Number(curr.data().totalPrice) || 0), 0);
-      
-      setStats(prev => ({ ...prev, users: totalUsers, value: totalValue }));
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const fetchProperties = async () => {
-    try {
-      // Actually need to import from firebase/firestore
-      const { collection, getDocs } = await import('firebase/firestore');
-      const querySnapshot = await getDocs(collection(db, 'properties'));
-      const propsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // 1. Real-time Properties listener
+    const unsubProps = onSnapshot(collection(db, 'properties'), (snap) => {
+      const propsData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setProperties(propsData);
-      setStats(prev => ({ ...prev, properties: propsData.filter(p => p.status === 'Active').length }));
-    } catch (error) {
-      toast.error("Failed to fetch properties");
-      console.error(error);
-    } finally {
+      setStats(prev => ({ 
+        ...prev, 
+        properties: propsData.filter(p => p.status === 'Active').length 
+      }));
       setLoading(false);
-    }
-  };
+    }, (error) => {
+      console.error(error);
+      toast.error("Failed to fetch properties");
+      setLoading(false);
+    });
+
+    // 2. Real-time Users count listener
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      setStats(prev => ({ ...prev, users: snap.size }));
+    }, (error) => {
+      console.error(error);
+    });
+
+    // 3. Real-time Bookings Value listener (Excludes Cancelled bookings)
+    const unsubBookings = onSnapshot(collection(db, 'bookings'), (snap) => {
+      const activeBookings = snap.docs.map(d => d.data()).filter(b => b.status !== 'Cancelled');
+      const totalValue = activeBookings.reduce((acc, curr) => acc + (Number(curr.totalPrice) || 0), 0);
+      setStats(prev => ({ ...prev, value: totalValue }));
+    }, (error) => {
+      console.error(error);
+    });
+
+    return () => {
+      unsubProps();
+      unsubUsers();
+      unsubBookings();
+    };
+  }, []);
 
   const deleteCloudinaryMedia = async (url) => {
     if (!url || !url.includes('cloudinary.com')) return;
@@ -75,10 +77,8 @@ export default function AdminDashboard() {
           }
         }
 
-        const { deleteDoc, doc } = await import('firebase/firestore');
         await deleteDoc(doc(db, 'properties', property.id));
         toast.success("Property deleted completely.");
-        fetchProperties();
       } catch (error) {
         toast.error("Failed to delete property");
       }
@@ -124,7 +124,13 @@ export default function AdminDashboard() {
             </div>
             <div>
               <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Booking Value</p>
-              <p className="text-2xl font-bold text-gray-900">৳{(stats.value / 10000000).toFixed(2)} Cr</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {stats.value >= 10000000 
+                  ? `৳ ${(stats.value / 10000000).toFixed(2)} Cr`
+                  : stats.value >= 100000 
+                  ? `৳ ${(stats.value / 100000).toFixed(2)} Lac`
+                  : `৳ ${stats.value.toLocaleString()}`}
+              </p>
             </div>
           </div>
         </div>

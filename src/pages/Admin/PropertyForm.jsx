@@ -46,6 +46,7 @@ export default function PropertyForm() {
     overview: '',
     brochureUrl: '',
     availableUnits: [],
+    inventory: [],
     amenities: [],
     images: {
       hero: '',
@@ -88,6 +89,7 @@ export default function PropertyForm() {
           ...data, 
           amenities: data.amenities || [],
           availableUnits: data.availableUnits || [],
+          inventory: data.inventory || [],
           propertyType: data.propertyType || '',
           buildingType: data.buildingType || '',
           unitsPerFloor: data.unitsPerFloor || '',
@@ -232,6 +234,7 @@ export default function PropertyForm() {
         overview: formData.overview,
         brochureUrl: formData.brochureUrl,
         availableUnits: formData.availableUnits,
+        inventory: formData.inventory,
         amenities: formData.amenities,
         images: formData.images
       }, { merge: true });
@@ -451,7 +454,10 @@ export default function PropertyForm() {
           
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-serif text-brand-dark">Available Units</h3>
+              <div className="flex flex-col">
+                <h3 className="text-xl font-serif text-brand-dark">Unit Types (Floor Plans)</h3>
+                <p className="text-sm text-gray-500 mt-1">Define the structural floor plans available in this property (e.g. Unit A, Unit B).</p>
+              </div>
               <button 
                 type="button"
                 onClick={() => {
@@ -480,7 +486,7 @@ export default function PropertyForm() {
                     <Trash2 size={18} />
                   </button>
                   <div className="w-full md:w-1/5">
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Unit Name</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Type Name</label>
                     <input type="text" value={unit.name} onChange={(e) => {
                       const newUnits = [...formData.availableUnits];
                       newUnits[idx].name = e.target.value;
@@ -528,6 +534,94 @@ export default function PropertyForm() {
               ))}
               {formData.availableUnits.length === 0 && (
                 <p className="text-gray-400 text-sm italic">No specific units added yet.</p>
+              )}
+            </div>
+          </div>
+
+          <hr className="border-gray-100" />
+          
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-col">
+                <h3 className="text-xl font-serif text-brand-dark">Exact Unit Inventory</h3>
+                <p className="text-sm text-gray-500 mt-1">Define the actual physical units in the building. Admins select these when making a booking.</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    inventory: [...(prev.inventory || []), { id: Math.random().toString(36).substr(2, 9), floor: '', unitName: '', unitType: '', status: 'Available' }]
+                  }));
+                  setIsDirty(true);
+                }}
+                className="bg-brand-primary text-white px-3 py-1 text-sm font-bold rounded flex items-center gap-1 hover:bg-brand-dark"
+              >
+                <Plus size={16} /> Add Inventory Unit
+              </button>
+            </div>
+            <div className="space-y-4">
+              {(formData.inventory || []).map((unit, idx) => (
+                <div key={unit.id} className="flex flex-wrap md:flex-nowrap gap-3 bg-gray-50 p-4 rounded border border-gray-200 relative">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, inventory: prev.inventory.filter((_, i) => i !== idx) }));
+                      setIsDirty(true);
+                    }} 
+                    className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                  <div className="w-full md:w-1/4">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Floor Number</label>
+                    <input type="text" value={unit.floor} onChange={(e) => {
+                      const newUnits = [...formData.inventory];
+                      newUnits[idx].floor = e.target.value;
+                      setFormData(p => ({ ...p, inventory: newUnits }));
+                      setIsDirty(true);
+                    }} placeholder="e.g. 12" className="w-full p-2 border rounded" />
+                  </div>
+                  <div className="w-full md:w-1/4">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Unit Name</label>
+                    <input type="text" value={unit.unitName} onChange={(e) => {
+                      const newUnits = [...formData.inventory];
+                      newUnits[idx].unitName = e.target.value;
+                      setFormData(p => ({ ...p, inventory: newUnits }));
+                      setIsDirty(true);
+                    }} placeholder="e.g. A" className="w-full p-2 border rounded" />
+                  </div>
+                  <div className="w-full md:w-1/4">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Unit Type</label>
+                    <select value={unit.unitType} onChange={(e) => {
+                      const newUnits = [...formData.inventory];
+                      newUnits[idx].unitType = e.target.value;
+                      setFormData(p => ({ ...p, inventory: newUnits }));
+                      setIsDirty(true);
+                    }} className="w-full p-2 border rounded bg-white">
+                      <option value="">Select Type</option>
+                      {formData.availableUnits.map(u => (
+                        <option key={u.name} value={`${u.name} - ${u.size} sqft`}>{u.name} - {u.size} sqft</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="w-full md:w-1/4">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Status</label>
+                    <select value={unit.status} onChange={(e) => {
+                      const newUnits = [...formData.inventory];
+                      newUnits[idx].status = e.target.value;
+                      setFormData(p => ({ ...p, inventory: newUnits }));
+                      setIsDirty(true);
+                    }} className="w-full p-2 border rounded bg-white">
+                      <option value="Available">Available</option>
+                      <option value="Booked">Booked</option>
+                      <option value="On Hold">On Hold</option>
+                    </select>
+                  </div>
+                </div>
+              ))}
+              {(!formData.inventory || formData.inventory.length === 0) && (
+                <p className="text-gray-400 text-sm italic">No specific units defined yet. You can pre-define them here so admins can select them when booking.</p>
               )}
             </div>
           </div>

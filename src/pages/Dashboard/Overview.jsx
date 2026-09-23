@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useGlobalState } from '../../context/GlobalState';
-import { db } from '../../firebase';
+import { db, auth } from '../../firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Building, Loader2, ChevronRight, CheckCircle, Clock } from 'lucide-react';
+import { Building, Loader2, ChevronRight, CheckCircle, Clock, Edit3, MapPin, CreditCard, Copy, Check, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import EditProfileModal from './EditProfileModal';
+import { toast } from 'react-toastify';
 
 export default function Overview() {
   const { userProfile } = useGlobalState();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const navigate = useNavigate();
+
+  const currentUser = auth.currentUser;
 
   useEffect(() => {
     if (!userProfile?.uid) return;
@@ -25,8 +31,20 @@ export default function Overview() {
 
   const formatMoney = (amount) => {
     if (amount === undefined || amount === null) return '৳0';
-    return '৳ ' + amount.toLocaleString('en-IN');
+    return '৳ ' + Math.round(Number(amount)).toLocaleString('en-IN');
   };
+
+  const copyReferralCode = () => {
+    const code = userProfile?.referralCode || userProfile?.uid?.slice(0, 8).toUpperCase() || 'REF123';
+    navigator.clipboard.writeText(code);
+    setCopiedCode(true);
+    toast.success("Referral code copied to clipboard!");
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const memberSince = userProfile?.createdAt?.toDate
+    ? userProfile.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
@@ -35,35 +53,114 @@ export default function Overview() {
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* User Profile Card */}
-          <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-200 flex items-center gap-6 col-span-1 lg:col-span-2">
-            <div className="w-20 h-20 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center text-3xl font-bold uppercase shrink-0">
-              {userProfile?.displayName?.charAt(0) || 'U'}
+          <div className="bg-white rounded-2xl shadow-sm p-6 sm:p-7 border border-gray-200 flex flex-col justify-between col-span-1 lg:col-span-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+              <div className="relative shrink-0">
+                {userProfile?.avatar ? (
+                  <img
+                    src={userProfile.avatar}
+                    alt={userProfile?.displayName || 'User'}
+                    className="w-20 h-20 rounded-2xl object-cover border-2 border-brand-accent/60 shadow-sm bg-brand-primary/10"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-2xl bg-brand-primary/10 text-brand-primary border-2 border-brand-primary/20 flex items-center justify-center text-3xl font-bold uppercase shadow-sm">
+                    {userProfile?.displayName?.charAt(0) || currentUser?.email?.charAt(0) || 'U'}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-2xl font-bold text-gray-900 truncate">
+                    {userProfile?.displayName || currentUser?.displayName || 'User'}
+                  </h2>
+                  {currentUser?.emailVerified && (
+                    <span className="flex items-center gap-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                      <ShieldCheck size={12} /> Verified
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-gray-500 text-sm mt-0.5">{userProfile?.email || currentUser?.email}</p>
+                {userProfile?.phone && (
+                  <p className="text-gray-600 text-sm font-medium mt-1">
+                    📞 {userProfile.phone}
+                  </p>
+                )}
+
+                {/* Additional Profile Info Snippets */}
+                <div className="flex flex-wrap items-center gap-2 mt-3 text-xs">
+                  {userProfile?.nid ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 font-medium rounded-lg border border-gray-200">
+                      <CreditCard size={13} className="text-brand-primary" />
+                      {userProfile.nidType || 'NID'}: {userProfile.nid}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 font-medium rounded-lg border border-amber-200/60">
+                      <CreditCard size={13} /> Add NID / Passport
+                    </span>
+                  )}
+
+                  {userProfile?.address && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 font-medium rounded-lg border border-gray-200 max-w-xs truncate">
+                      <MapPin size={13} className="text-brand-primary shrink-0" />
+                      <span className="truncate">{userProfile.address}</span>
+                    </span>
+                  )}
+
+                  {memberSince && (
+                    <span className="text-gray-400 font-medium ml-1">
+                      Member since {memberSince}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">{userProfile?.displayName || 'User'}</h2>
-              <p className="text-gray-500">{userProfile?.email}</p>
-              {userProfile?.phone && <p className="text-gray-500 text-sm mt-1">{userProfile.phone}</p>}
-              <button className="mt-3 px-4 py-1.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-full hover:bg-gray-200 transition-colors">
-                Edit Profile
+
+            <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium">
+                Client ID: <span className="font-mono text-gray-600">{userProfile?.uid?.slice(0, 8).toUpperCase() || 'N/A'}</span>
+              </span>
+              <button
+                onClick={() => setIsEditModalOpen(true)}
+                className="px-5 py-2 bg-brand-primary text-white text-sm font-bold rounded-xl hover:bg-brand-dark transition-all flex items-center gap-2 shadow-sm hover:shadow"
+              >
+                <Edit3 size={15} /> Edit Profile
               </button>
             </div>
           </div>
 
           {/* Referral Card */}
-          <div className="bg-brand-dark rounded-2xl shadow-sm p-6 border border-brand-dark text-white relative overflow-hidden">
-            <div className="absolute -right-4 -top-4 opacity-10">
-              <CheckCircle size={120} />
+          <div className="bg-brand-dark rounded-2xl shadow-sm p-6 sm:p-7 border border-brand-dark text-white relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute -right-4 -top-4 opacity-10 pointer-events-none">
+              <CheckCircle size={140} />
             </div>
-            <h3 className="text-lg font-bold font-serif mb-2 relative z-10 text-brand-accent">Refer & Earn</h3>
-            <p className="text-sm text-gray-300 mb-4 relative z-10">Invite friends and earn up to ৳100,000 on their first successful booking.</p>
-            <div className="bg-black/30 p-3 rounded-lg flex justify-between items-center border border-white/10 relative z-10">
-              <span className="font-mono font-bold tracking-wider">{userProfile?.uid?.slice(0, 8).toUpperCase() || 'REF123'}</span>
-              <button className="text-brand-accent hover:text-white transition-colors" title="Copy Code">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            <div>
+              <h3 className="text-lg font-bold font-serif mb-2 relative z-10 text-brand-accent">Refer & Earn</h3>
+              <p className="text-sm text-gray-300 mb-4 relative z-10">Invite friends and earn up to ৳100,000 on their first successful booking.</p>
+            </div>
+            <div className="bg-black/40 backdrop-blur-sm p-3.5 rounded-xl flex justify-between items-center border border-white/15 relative z-10">
+              <span className="font-mono font-bold tracking-widest text-brand-accent">
+                {userProfile?.referralCode || userProfile?.uid?.slice(0, 8).toUpperCase() || 'REF123'}
+              </span>
+              <button
+                onClick={copyReferralCode}
+                className="p-1.5 hover:bg-white/10 text-brand-accent hover:text-white rounded-lg transition-colors"
+                title="Copy Referral Code"
+              >
+                {copiedCode ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
               </button>
             </div>
           </div>
         </div>
+
+        {/* Edit Profile Modal */}
+        <EditProfileModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          userProfile={userProfile}
+        />
 
         {/* My Bookings Section */}
         <div className="mt-12">

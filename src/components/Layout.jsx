@@ -254,6 +254,7 @@ export default function Layout() {
                 <li><Link to="/virtual-tour" className="hover:text-brand-accent transition-colors">Virtual Tour</Link></li>
                 <li><Link to="/live-cameras" className="hover:text-brand-accent transition-colors">Live Cameras</Link></li>
                 <li><Link to="/contact" className="hover:text-brand-accent transition-colors">Contact Us</Link></li>
+                <li><Link to="/legal" className="hover:text-brand-accent transition-colors">Legal & Compliance</Link></li>
               </ul>
             </div>
             <div>
