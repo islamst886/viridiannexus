@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckSquare, Clock, AlertCircle, Plus, Trash2, Save, X, Edit2, Upload, Loader2, Image as ImageIcon, ArrowLeft } from 'lucide-react';
 import { useGlobalState } from '../../context/GlobalState';
 import AdminSidebar from '../../components/AdminSidebar';
+import { deleteCloudinaryMedia, deleteCloudinaryMediaBeacon } from '../../utils/cloudinary';
 
 // Helper for simple unique ID since we don't want to rely on uuid package if not installed
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -28,6 +29,21 @@ export default function ProgressManager() {
     percentage: 0,
     images: []
   });
+  
+  // GC State
+  const [imagesToDelete, setImagesToDelete] = useState([]);
+  const [newlyUploadedImages, setNewlyUploadedImages] = useState([]);
+  const newImagesRef = useRef(newlyUploadedImages);
+  useEffect(() => { newImagesRef.current = newlyUploadedImages; }, [newlyUploadedImages]);
+
+  // Cleanup orphans on unmount
+  useEffect(() => {
+    return () => {
+      if (newImagesRef.current.length > 0) {
+        newImagesRef.current.forEach(url => deleteCloudinaryMediaBeacon(url));
+      }
+    };
+  }, []);
 
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
   const milestones = selectedProperty?.milestones || [];
@@ -39,20 +55,6 @@ export default function ProgressManager() {
       [name]: name === 'percentage' ? Number(value) : value
     }));
     setAdminUnsavedChanges(true);
-  };
-
-  const deleteCloudinaryMedia = async (url) => {
-    if (!url || !url.includes('cloudinary.com')) return;
-    try {
-      const res = await fetch('/api/deleteMedia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-      if (!res.ok) console.warn("Media deletion skipped.");
-    } catch (err) {
-      console.error("Deletion API error:", err);
-    }
   };
 
   const handleImageUpload = async (e) => {
@@ -81,6 +83,7 @@ export default function ProgressManager() {
         ...prev, 
         images: [...(prev.images || []), data.secure_url] 
       }));
+      setNewlyUploadedImages(prev => [...prev, data.secure_url]);
       setAdminUnsavedChanges(true);
       toast.success("Image uploaded successfully!");
     } catch (error) {
@@ -91,13 +94,15 @@ export default function ProgressManager() {
     }
   };
 
-  const handleRemoveImage = async (urlToRemove) => {
+  const handleRemoveImage = (urlToRemove) => {
     setMilestoneForm(prev => ({
       ...prev,
       images: prev.images.filter(url => url !== urlToRemove)
     }));
+    if (urlToRemove.includes('cloudinary.com')) {
+      setImagesToDelete(prev => [...prev, urlToRemove]);
+    }
     setAdminUnsavedChanges(true);
-    await deleteCloudinaryMedia(urlToRemove);
   };
 
   const handleSaveMilestone = async (e) => {
@@ -124,6 +129,14 @@ export default function ProgressManager() {
       }
 
       await updateDoc(propertyRef, { milestones: newMilestones });
+      
+      // Execute GC
+      if (imagesToDelete.length > 0) {
+        await Promise.all(imagesToDelete.map(url => deleteCloudinaryMedia(url)));
+        setImagesToDelete([]);
+      }
+      setNewlyUploadedImages([]); // committed successfully, prevent unmount deletion
+      
       toast.success(`Milestone ${editingMilestoneId ? 'updated' : 'added'} successfully!`);
       
       // Reset form
@@ -176,6 +189,14 @@ export default function ProgressManager() {
     if (adminUnsavedChanges) {
       if (!window.confirm("You have unsaved changes. Are you sure you want to discard them?")) return;
     }
+    
+    // Discarding form, cleanup new uploads
+    if (newlyUploadedImages.length > 0) {
+      newlyUploadedImages.forEach(url => deleteCloudinaryMedia(url));
+      setNewlyUploadedImages([]);
+    }
+    setImagesToDelete([]); // reset queue
+    
     setEditingMilestoneId(null);
     setMilestoneForm({ id: '', date: '', title: '', description: '', status: 'upcoming', percentage: 0, images: [] });
     setAdminUnsavedChanges(false);
@@ -301,7 +322,11 @@ export default function ProgressManager() {
                       <img src={url} alt={`Milestone img ${idx}`} className="h-24 w-24 rounded-lg border shadow-sm object-cover" />
                       <button
                         type="button"
-                        onClick={() => handleRemoveImage(url)}
+                        onClick={() => {
+                          if (window.confirm("Are you sure you want to remove this attached image?")) {
+                            handleRemoveImage(url);
+                          }
+                        }}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow"
                       >
                         <X size={14} />

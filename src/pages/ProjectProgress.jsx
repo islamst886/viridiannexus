@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useGlobalState } from '../context/GlobalState';
 import { Link } from 'react-router-dom';
-import { CheckCircle, Activity, Calendar, Image as ImageIcon } from 'lucide-react';
+import { CheckCircle, Activity, Calendar, ChevronDown, Building } from 'lucide-react';
 
 export default function ProjectProgress() {
   const { properties, loadingProperties } = useGlobalState();
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Filter properties that actually have milestones
   const propertiesWithMilestones = properties.filter(p => p.milestones && p.milestones.length > 0);
@@ -38,17 +39,49 @@ export default function ProjectProgress() {
           <>
             <p className="text-lg text-pine-600 text-center mb-8">Tracking the development milestones of our premium properties.</p>
             
-            <div className="max-w-md mx-auto mb-16">
-              <label className="block text-sm font-bold text-pine-900 mb-2 text-center uppercase tracking-wider">Select Project</label>
-              <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="w-full p-4 bg-viridian-50 border-2 border-viridian-200 rounded-xl outline-none focus:border-viridian-500 font-bold text-pine-900 appearance-none text-center cursor-pointer shadow-sm hover:border-viridian-300 transition-colors"
-              >
-                {propertiesWithMilestones.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+            <div className="max-w-md mx-auto mb-16 relative">
+              <label className="block text-sm font-bold text-pine-900 mb-3 text-center uppercase tracking-wider">Select Project</label>
+              
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="w-full p-4 bg-white border-2 border-viridian-200 rounded-xl outline-none focus:border-viridian-500 focus:ring-4 focus:ring-viridian-500/20 font-bold text-pine-900 text-left flex items-center justify-between cursor-pointer shadow-sm hover:border-viridian-400 transition-all duration-300"
+                >
+                  <span className="flex items-center gap-3 truncate">
+                    <Building size={20} className="text-viridian-500 flex-shrink-0" />
+                    <span className="truncate">{selectedProperty ? selectedProperty.name : 'Select a project'}</span>
+                  </span>
+                  <ChevronDown size={20} className={`text-viridian-500 transition-transform duration-300 flex-shrink-0 ${dropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {dropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)}></div>
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-viridian-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                        {propertiesWithMilestones.map(p => (
+                          <button
+                            key={p.id}
+                            onClick={() => {
+                              setSelectedProjectId(p.id);
+                              setDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-5 py-4 transition-colors flex items-center justify-between group border-b border-gray-50 last:border-0 ${
+                              selectedProjectId === p.id 
+                                ? 'bg-viridian-50 text-viridian-900 font-bold' 
+                                : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className="truncate pr-4">{p.name}</span>
+                            {selectedProjectId === p.id && <CheckCircle size={18} className="text-viridian-600 flex-shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="relative border-l-2 border-viridian-200 ml-4 md:ml-8">

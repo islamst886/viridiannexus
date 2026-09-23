@@ -5,6 +5,7 @@ import { Plus, Edit, Trash2, Users, Building, DollarSign } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
+import { deleteCloudinaryMedia } from '../../utils/cloudinary';
 
 export default function AdminDashboard() {
   const [properties, setProperties] = useState([]);
@@ -52,29 +53,41 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  const deleteCloudinaryMedia = async (url) => {
-    if (!url || !url.includes('cloudinary.com')) return;
-    try {
-      await fetch('/api/deleteMedia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-    } catch (err) {
-      console.error("Deletion API error:", err);
-    }
-  };
-
   const handleDelete = async (property) => {
     if (window.confirm("Are you sure you want to delete this property? All associated media will also be permanently deleted.")) {
       try {
-        // Delete all associated media first
+        // Gather all associated Cloudinary media for recursive deletion
+        const allMediaUrls = [];
+        
+        // 1. Core images (hero, map)
         if (property.images) {
-          toast.info("Deleting associated media from Cloudinary...");
-          const mediaUrls = Object.values(property.images).filter(url => url && url.includes('cloudinary.com'));
-          for (const url of mediaUrls) {
-            await deleteCloudinaryMedia(url);
-          }
+          Object.values(property.images).forEach(url => {
+            if (url && url.includes('cloudinary.com')) allMediaUrls.push(url);
+          });
+        }
+        
+        // 2. Brochure
+        if (property.brochureUrl && property.brochureUrl.includes('cloudinary.com')) {
+          allMediaUrls.push(property.brochureUrl);
+        }
+        
+        // 3. Milestone images
+        if (property.milestones && Array.isArray(property.milestones)) {
+          property.milestones.forEach(m => {
+            if (m.images && Array.isArray(m.images)) {
+              m.images.forEach(url => {
+                if (url && url.includes('cloudinary.com')) allMediaUrls.push(url);
+              });
+            }
+            if (m.imageUrl && m.imageUrl.includes('cloudinary.com')) {
+              allMediaUrls.push(m.imageUrl);
+            }
+          });
+        }
+
+        if (allMediaUrls.length > 0) {
+          toast.info(`Deleting ${allMediaUrls.length} associated media files from Cloudinary...`);
+          await Promise.all(allMediaUrls.map(url => deleteCloudinaryMedia(url)));
         }
 
         await deleteDoc(doc(db, 'properties', property.id));

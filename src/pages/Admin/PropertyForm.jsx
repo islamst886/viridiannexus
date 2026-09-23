@@ -7,6 +7,7 @@ import { ArrowLeft, Save, CheckSquare, Plus, Trash2, FileText, Tag, X, ChevronDo
 import { usePropertyTypes } from '../../hooks/usePropertyTypes';
 import { useGlobalState } from '../../context/GlobalState';
 import { AVAILABLE_ICONS } from '../../utils/iconLibrary';
+import { deleteCloudinaryMedia, deleteCloudinaryMediaBeacon } from '../../utils/cloudinary';
 
 const AVAILABLE_AMENITIES = [
   '24/7 Security', 'Smart Home Ready', 'Dedicated Parking', 'Green Spaces',
@@ -58,6 +59,28 @@ export default function PropertyForm() {
       video: '',
     }
   });
+
+  // Cloudinary GC State
+  const [mediaToDelete, setMediaToDelete] = useState([]);
+  const [newlyUploadedMedia, setNewlyUploadedMedia] = useState([]);
+  
+  // Refs for unmount cleanup
+  const bypassRef = useRef(false);
+  const newlyUploadedRef = useRef(newlyUploadedMedia);
+  
+  // We use this to track if we successfully saved so we don't GC newly uploaded media
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  useEffect(() => { bypassRef.current = saveSuccess; }, [saveSuccess]);
+  useEffect(() => { newlyUploadedRef.current = newlyUploadedMedia; }, [newlyUploadedMedia]);
+
+  useEffect(() => {
+    return () => {
+      // If component unmounts and we didn't save, delete newly uploaded media to prevent orphans
+      if (!bypassRef.current && newlyUploadedRef.current.length > 0) {
+        newlyUploadedRef.current.forEach(url => deleteCloudinaryMediaBeacon(url));
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!typesLoading && localPropertyTypes.length === 0 && !isDirty) {
@@ -125,22 +148,6 @@ export default function PropertyForm() {
     setIsDirty(true);
   };
 
-  const deleteCloudinaryMedia = async (url) => {
-    if (!url || !url.includes('cloudinary.com')) return;
-    try {
-      const res = await fetch('/api/deleteMedia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-      if (!res.ok) {
-        console.warn("Media deletion skipped. Note: /api/deleteMedia requires Wrangler for local testing or a deployed Cloudflare environment.");
-      }
-    } catch (err) {
-      console.error("Deletion API error:", err);
-    }
-  };
-
   const handleFileUpload = async (e, mediaType) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -171,20 +178,19 @@ export default function PropertyForm() {
       if (mediaType === 'brochure') {
         const oldBrochure = formData.brochureUrl;
         if (oldBrochure && oldBrochure.includes('cloudinary.com')) {
-          toast.info("Cleaning up old brochure...");
-          await deleteCloudinaryMedia(oldBrochure);
+          setMediaToDelete(prev => [...prev, oldBrochure]);
         }
+        setNewlyUploadedMedia(prev => [...prev, data.secure_url]);
         setFormData(prev => ({ ...prev, brochureUrl: data.secure_url }));
         toast.success(`Brochure uploaded successfully!`);
         return;
       }
 
-      // If replacing an existing Cloudinary image, delete the old one securely via backend
       const oldUrl = formData.images[mediaType];
       if (oldUrl && oldUrl.includes('cloudinary.com')) {
-        toast.info(`Cleaning up old ${mediaType}...`);
-        await deleteCloudinaryMedia(oldUrl);
+        setMediaToDelete(prev => [...prev, oldUrl]);
       }
+      setNewlyUploadedMedia(prev => [...prev, data.secure_url]);
 
       setFormData(prev => ({
         ...prev,
@@ -236,6 +242,16 @@ export default function PropertyForm() {
 
       // Save custom property types if dirty
       await setDoc(doc(db, 'settings', 'propertyTypes'), { types: localPropertyTypes });
+
+      // GC: Successfully saved to DB, so we can now safely delete the old replaced media
+      if (mediaToDelete.length > 0) {
+        toast.info("Cleaning up old media...");
+        await Promise.all(mediaToDelete.map(url => deleteCloudinaryMedia(url)));
+        setMediaToDelete([]);
+      }
+      
+      // Clear newly uploaded tracking so unmount doesn't delete them
+      setNewlyUploadedMedia([]);
 
       setIsDirty(false);
       toast.success(`Property ${isEditing ? 'updated' : 'created'} successfully!`);
@@ -785,7 +801,13 @@ export default function PropertyForm() {
                   {formData.images.hero ? (
                     <div className="flex flex-col items-center">
                       <img src={formData.images.hero} alt="Hero Preview" className="h-32 object-cover rounded-md mb-2 shadow-sm" />
-                      <button type="button" onClick={() => setFormData(p => ({...p, images: {...p.images, hero: ''}}))} className="text-xs text-red-500 hover:text-red-700 font-bold">Remove Image</button>
+                      <button type="button" onClick={() => {
+                        if (window.confirm("Are you sure you want to remove this hero image?")) {
+                          if (formData.images.hero?.includes('cloudinary.com')) setMediaToDelete(prev => [...prev, formData.images.hero]);
+                          setFormData(p => ({...p, images: {...p.images, hero: ''}}));
+                          setIsDirty(true);
+                        }
+                      }} className="text-xs text-red-500 hover:text-red-700 font-bold">Remove Image</button>
                     </div>
                   ) : uploadingImage === 'hero' ? (
                     <div className="flex flex-col items-center py-4">
@@ -830,7 +852,13 @@ export default function PropertyForm() {
                   {formData.images.map ? (
                     <div className="flex flex-col items-center">
                       <img src={formData.images.map} alt="Map Preview" className="h-32 object-cover rounded-md mb-2 shadow-sm" />
-                      <button type="button" onClick={() => setFormData(p => ({...p, images: {...p.images, map: ''}}))} className="text-xs text-red-500 hover:text-red-700 font-bold">Remove Image</button>
+                      <button type="button" onClick={() => {
+                        if (window.confirm("Are you sure you want to remove this map image?")) {
+                          if (formData.images.map?.includes('cloudinary.com')) setMediaToDelete(prev => [...prev, formData.images.map]);
+                          setFormData(p => ({...p, images: {...p.images, map: ''}}));
+                          setIsDirty(true);
+                        }
+                      }} className="text-xs text-red-500 hover:text-red-700 font-bold">Remove Image</button>
                     </div>
                   ) : uploadingImage === 'map' ? (
                     <div className="flex flex-col items-center py-4">
@@ -904,9 +932,11 @@ export default function PropertyForm() {
                        <button 
                          type="button"
                          onClick={() => {
-                           toast.info("Deleting brochure securely...");
-                           deleteCloudinaryMedia(formData.brochureUrl);
-                           setFormData(p => ({...p, brochureUrl: ''}));
+                           if (window.confirm("Are you sure you want to remove this brochure file?")) {
+                             if (formData.brochureUrl?.includes('cloudinary.com')) setMediaToDelete(prev => [...prev, formData.brochureUrl]);
+                             setFormData(p => ({...p, brochureUrl: ''}));
+                             setIsDirty(true);
+                           }
                          }}
                          className="text-xs font-bold text-red-600 hover:text-red-800 px-4 py-2 bg-red-100 rounded-md transition-colors"
                        >
