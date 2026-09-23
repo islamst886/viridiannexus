@@ -698,7 +698,7 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
         </div>
 
-        <div className="p-8 overflow-y-auto flex-1">
+        <div className="p-8 overflow-y-auto flex-1 min-h-[450px]">
           {renderStepIndicators()}
 
           {step === 1 && (
