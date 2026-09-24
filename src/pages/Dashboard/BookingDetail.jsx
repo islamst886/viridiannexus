@@ -49,7 +49,7 @@ export default function BookingDetail() {
 
   const formatMoney = (amount) => {
     if (amount === undefined || amount === null) return '৳0';
-    return '৳ ' + Math.round(Number(amount)).toLocaleString('en-IN');
+    return '৳\u00A0' + Math.round(Number(amount)).toLocaleString('en-IN');
   };
 
   const formatDate = (ts) => {
@@ -82,7 +82,7 @@ export default function BookingDetail() {
         <div className="flex justify-between items-end mb-8">
           <div>
             <h1 className="text-3xl font-serif font-bold text-gray-900 mb-2">Booking #{booking.bookingRef}</h1>
-            <p className="text-gray-500 font-medium">{booking.propertyName} - {booking.unitType} {booking.parkingIncluded ? ` | 🚗 Parking: ${booking.parkingIncluded}` : (booking.parkingRequested > 0 && ` | 🚗 ${booking.parkingRequested} Parking Requested`)}</p>
+            <p className="text-gray-500 font-medium">{booking.propertyName} - {booking.unitType} {booking.unitNumber && `| ${booking.unitNumber}`} {booking.parkingIncluded ? ` | 🚗 Parking: ${booking.parkingIncluded}` : (booking.parkingRequested > 0 && ` | 🚗 ${booking.parkingRequested} Parking Requested`)}</p>
           </div>
           <span className={`px-4 py-2 rounded-full text-sm font-bold ${booking.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-800'}`}>
             {booking.status}
@@ -191,13 +191,13 @@ export default function BookingDetail() {
                 </div>
                 
                 <div className="pt-6 border-t border-brand-neutral/20 grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-brand-neutral/60 text-xs font-bold uppercase mb-1">Total Paid</p>
-                    <p className="text-xl font-bold text-green-400">{formatMoney(booking.totalPaid)}</p>
+                    <p className="text-lg font-bold text-green-400 tracking-tight">{formatMoney(booking.totalPaid)}</p>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-brand-neutral/60 text-xs font-bold uppercase mb-1">Balance Due</p>
-                    <p className="text-xl font-bold">{formatMoney(booking.balanceDue)}</p>
+                    <p className="text-lg font-bold tracking-tight">{formatMoney(booking.balanceDue)}</p>
                   </div>
                 </div>
 

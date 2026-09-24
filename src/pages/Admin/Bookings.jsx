@@ -4,7 +4,7 @@ import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, setDoc, se
 import { useGlobalState } from '../../context/GlobalState';
 import AdminSidebar from '../../components/AdminSidebar';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, ArrowRight, Loader2, X, ChevronRight, CheckCircle, FileText, Info, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Filter, ArrowRight, Loader2, X, ChevronRight, ChevronDown, CheckCircle, FileText, Info, ShieldCheck } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const AdminCustomSelect = ({ value, onChange, options, placeholder }) => {
@@ -76,6 +76,15 @@ export default function AdminBookings() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
+  
+  const [collapsedGroups, setCollapsedGroups] = useState({});
+
+  const toggleGroup = (propName) => {
+    setCollapsedGroups(prev => ({
+      ...prev,
+      [propName]: !prev[propName]
+    }));
+  };
 
   // Stats
   const [stats, setStats] = useState({
@@ -167,6 +176,13 @@ export default function AdminBookings() {
     const matchesStatus = filterStatus === 'All' || b.status === filterStatus;
     return matchesSearch && matchesStage && matchesStatus;
   });
+
+  const groupedBookings = filteredBookings.reduce((groups, booking) => {
+    const propName = booking.propertyName || 'Unknown Property';
+    if (!groups[propName]) groups[propName] = [];
+    groups[propName].push(booking);
+    return groups;
+  }, {});
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans">
@@ -278,43 +294,63 @@ export default function AdminBookings() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredBookings.map((b) => (
-                    <tr key={b.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => navigate(`/admin/bookings/${b.id}`)}>
-                      <td className="p-4">
-                        <div className="font-semibold text-gray-900">{b.bookingRef}</div>
-                        <div className="text-sm text-gray-700 font-medium">{b.clientName}</div>
-                        {(b.linkedUserId || b.clientId) && (
-                          <div className="text-[11px] font-mono text-gray-400 mt-0.5">
-                            ID: {(b.linkedUserId || b.clientId).slice(0, 8).toUpperCase()}
+                  {Object.entries(groupedBookings).map(([propName, propertyBookings]) => (
+                    <React.Fragment key={propName}>
+                      <tr 
+                        className="bg-brand-primary/5 border-y border-brand-primary/10 cursor-pointer hover:bg-brand-primary/10 transition-colors"
+                        onClick={() => toggleGroup(propName)}
+                      >
+                        <td colSpan="6" className="p-4">
+                          <div className="flex justify-between items-center w-full">
+                            <div className="font-serif font-bold text-brand-dark text-lg flex items-center gap-2">
+                              {propName}
+                              <span className="bg-white px-2 py-0.5 rounded-full text-xs text-brand-primary border border-brand-primary/20">
+                                {propertyBookings.length} {propertyBookings.length === 1 ? 'Booking' : 'Bookings'}
+                              </span>
+                            </div>
+                            <ChevronDown className={`text-brand-primary transition-transform ${collapsedGroups[propName] ? '' : 'rotate-180'}`} size={20} />
                           </div>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <div className="font-medium text-gray-900">{b.propertyName}</div>
-                        <div className="text-sm text-gray-500">{b.unitType} {b.unitNumber && `- ${b.unitNumber}`}</div>
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStageColor(b.stage)}`}>
-                          {b.stage}
-                        </span>
-                        {b.status !== 'Active' && (
-                           <div className="mt-1 text-xs font-bold text-gray-400 uppercase">{b.status}</div>
-                        )}
-                      </td>
-                      <td className="p-4 font-medium text-gray-900">
-                        {formatMoney(b.totalPrice)}
-                      </td>
-                      <td className="p-4">
-                        <span className={`font-semibold ${b.balanceDue > 0 ? 'text-brand-dark' : 'text-green-600'}`}>
-                          {formatMoney(b.balanceDue)}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <button className="text-gray-400 group-hover:text-brand-primary transition-colors">
-                          <ChevronRight size={20} />
-                        </button>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {!collapsedGroups[propName] && propertyBookings.map((b) => (
+                        <tr key={b.id} className="hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => navigate(`/admin/bookings/${b.id}`)}>
+                          <td className="p-4 pl-6">
+                            <div className="font-semibold text-gray-900">{b.bookingRef}</div>
+                            <div className="text-sm text-gray-700 font-medium">{b.clientName}</div>
+                            {(b.linkedUserId || b.clientId) && (
+                              <div className="text-[11px] font-mono text-gray-400 mt-0.5">
+                                ID: {(b.linkedUserId || b.clientId).slice(0, 8).toUpperCase()}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <div className="text-sm font-medium text-gray-900">{b.unitType}</div>
+                            {b.unitNumber && <div className="text-sm text-gray-500">Unit: {b.unitNumber}</div>}
+                          </td>
+                          <td className="p-4">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStageColor(b.stage)}`}>
+                              {b.stage}
+                            </span>
+                            {b.status !== 'Active' && (
+                               <div className="mt-1 text-xs font-bold text-gray-400 uppercase">{b.status}</div>
+                            )}
+                          </td>
+                          <td className="p-4 font-medium text-gray-900">
+                            {formatMoney(b.totalPrice)}
+                          </td>
+                          <td className="p-4">
+                            <span className={`font-semibold ${b.balanceDue > 0 ? 'text-brand-dark' : 'text-green-600'}`}>
+                              {formatMoney(b.balanceDue)}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button className="text-gray-400 group-hover:text-brand-primary transition-colors">
+                              <ChevronRight size={20} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -372,6 +408,7 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
       installmentCount: '',
       installmentStartDate: '',
       installmentFrequency: 'Monthly',
+      pricingAdjustment: '',
       notes: ''
     };
   });
@@ -433,6 +470,29 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
       toast.success("Account linked successfully.");
     }
   };
+
+  useEffect(() => {
+    if (form.propertyId && form.inventoryId) {
+      const prop = properties.find(p => p.id === form.propertyId);
+      if (prop) {
+        const inv = prop.inventory?.find(i => i.id === form.inventoryId);
+        const baseType = prop.availableUnits?.find(u => inv?.unitType?.startsWith(u.name));
+        const baseUnitPrice = Number(baseType?.price || 0);
+        
+        const parkingPricePerSpot = Number(prop.parkingPrice || 0);
+        const parkingQty = (form.parkingSpotIds || []).length;
+        const totalParkingPrice = parkingPricePerSpot * parkingQty;
+        
+        const adjustment = Number(form.pricingAdjustment || 0);
+        
+        const newTotal = baseUnitPrice + totalParkingPrice + adjustment;
+        
+        if (Number(form.totalPrice) !== newTotal) {
+           setForm(prev => ({...prev, totalPrice: newTotal}));
+        }
+      }
+    }
+  }, [form.propertyId, form.inventoryId, form.parkingSpotIds, form.pricingAdjustment, properties]);
 
   const nextStep = () => {
     // Validation
@@ -613,18 +673,25 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
       if (form.installmentCount && Number(form.installmentCount) > 0) {
         const count = Number(form.installmentCount);
         const amountRemaining = Number(form.totalPrice) - Number(form.tokenAmount) - Number(form.downPaymentAmount || 0);
-        const instAmount = amountRemaining / count;
+        
+        // Highly standard professional rounding to nearest 10 (so installments end in clean 0s)
+        const baseInstAmount = Math.round((amountRemaining / count) / 10) * 10;
         
         let currentDate = form.installmentStartDate ? new Date(form.installmentStartDate) : new Date();
         
         for (let i = 1; i <= count; i++) {
+          // If it's the last installment, it absorbs the exact remainder to ensure the total is strictly maintained.
+          const currentInstAmount = (i === count) 
+            ? (amountRemaining - (baseInstAmount * (count - 1))) 
+            : baseInstAmount;
+            
           const instRef = doc(collection(db, `bookings/${newBookingId}/payments`));
           await setDoc(instRef, {
             type: 'Installment',
             installmentNumber: i,
             scheduledDate: new Date(currentDate),
             paidDate: null,
-            scheduledAmount: instAmount,
+            scheduledAmount: currentInstAmount,
             receivedAmount: 0,
             paymentMode: 'Cash',
             referenceNumber: '',
@@ -899,17 +966,45 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
           {step === 3 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
               <h3 className="text-lg font-bold border-b pb-2 mb-4">Financial Agreement</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="flex items-center gap-1 text-sm font-bold text-gray-700 mb-2 relative group w-max">
-                    Total Agreed Price (BDT) *
-                    <Info size={14} className="text-gray-400 cursor-help" />
-                    <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-brand-dark text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg text-left font-normal whitespace-normal">
-                      The final, fully negotiated total price for this property unit.
+              
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-5 mb-6">
+                <h4 className="text-sm font-bold text-gray-700 uppercase mb-4 tracking-wider">Pricing Breakdown</h4>
+                
+                <div className="space-y-3 mb-4">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">Base Unit Price</span>
+                    <span className="font-bold">৳ {Number(currentProperty?.availableUnits?.find(u => currentProperty?.inventory?.find(i => i.id === form.inventoryId)?.unitType?.startsWith(u.name))?.price || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  {(form.parkingSpotIds || []).length > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">Parking ({(form.parkingSpotIds || []).length} spot{(form.parkingSpotIds || []).length > 1 ? 's' : ''} @ ৳ {Number(currentProperty?.parkingPrice || 0).toLocaleString('en-IN')})</span>
+                      <span className="font-bold">৳ {(Number(currentProperty?.parkingPrice || 0) * (form.parkingSpotIds || []).length).toLocaleString('en-IN')}</span>
                     </div>
-                  </label>
-                  <input type="number" className="w-full p-3 border rounded-lg bg-gray-50 font-bold text-lg" value={form.totalPrice} onChange={e => setForm({...form, totalPrice: e.target.value})} />
+                  )}
                 </div>
+
+                <div className="border-t border-gray-200 pt-4 mb-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Pricing Adjustment (Discount / Markup)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">৳</span>
+                    <input 
+                      type="number" 
+                      placeholder="e.g. -500000 for discount, or 200000 for markup"
+                      className="w-full pl-8 p-3 border border-gray-300 rounded-lg text-sm bg-white" 
+                      value={form.pricingAdjustment} 
+                      onChange={e => setForm({...form, pricingAdjustment: e.target.value})} 
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Use negative values for discounts.</p>
+                </div>
+
+                <div className="flex justify-between items-center pt-4 border-t border-gray-300">
+                  <span className="font-bold text-gray-900">Total Agreed Price</span>
+                  <span className="text-2xl font-bold text-brand-primary">৳ {Number(form.totalPrice || 0).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="flex items-center gap-1 text-sm font-bold text-gray-700 mb-2 relative group w-max">
                     Token Amount *

@@ -664,6 +664,11 @@ function PaymentModal({ payment, bookingId, adminName, adminUid, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!amount || amount <= 0) return toast.error("Amount must be greater than zero");
+    
+    if (!window.confirm(`Are you sure you want to record a payment of ৳${Number(amount).toLocaleString('en-IN')} via ${mode}?\n\nThis will update the client's payment ledger and financial summary. Please ensure the amount is correct before confirming.`)) {
+      return;
+    }
+    
     setLoading(true);
 
     try {

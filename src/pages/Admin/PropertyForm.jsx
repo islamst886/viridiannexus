@@ -31,6 +31,11 @@ export default function PropertyForm() {
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(null);
   const [openIconPicker, setOpenIconPicker] = useState(null);
+  
+  // Collapsible UI state
+  const [isUnitTypesOpen, setIsUnitTypesOpen] = useState(false);
+  const [isUnitInventoryOpen, setIsUnitInventoryOpen] = useState(false);
+  const [isParkingInventoryOpen, setIsParkingInventoryOpen] = useState(false);
   const [formData, setFormData] = useState({
     id: '',
     name: '',
@@ -637,8 +642,14 @@ export default function PropertyForm() {
           
           <div>
             <div className="flex justify-between items-center mb-4">
-              <div className="flex flex-col">
-                <h3 className="text-xl font-serif text-brand-dark">Unit Types (Floor Plans)</h3>
+              <div 
+                className="flex flex-col cursor-pointer flex-1"
+                onClick={() => setIsUnitTypesOpen(!isUnitTypesOpen)}
+              >
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-serif text-brand-dark hover:text-brand-primary transition-colors">Unit Types (Floor Plans)</h3>
+                  <ChevronDown className={`text-gray-400 transition-transform ${isUnitTypesOpen ? 'rotate-180' : ''}`} size={20} />
+                </div>
                 <p className="text-sm text-gray-500 mt-1">Define the structural floor plans available in this property (e.g. Unit A, Unit B).</p>
               </div>
               <button 
@@ -648,6 +659,7 @@ export default function PropertyForm() {
                     ...prev,
                     availableUnits: [...prev.availableUnits, { name: '', size: '', beds: 0, baths: 0, balconies: 0, price: '' }]
                   }));
+                  setIsUnitTypesOpen(true);
                   setIsDirty(true);
                 }}
                 className="bg-brand-primary text-white px-3 py-1 text-sm font-bold rounded flex items-center gap-1 hover:bg-brand-dark"
@@ -655,6 +667,8 @@ export default function PropertyForm() {
                 <Plus size={16} /> Add Unit
               </button>
             </div>
+            
+            {isUnitTypesOpen && (
             <div className="space-y-4">
               {formData.availableUnits.map((unit, idx) => (
                 <div key={idx} className="flex flex-wrap md:flex-nowrap gap-3 bg-gray-50 p-4 rounded border border-gray-200 relative">
@@ -729,14 +743,21 @@ export default function PropertyForm() {
                 <p className="text-gray-400 text-sm italic">No specific units added yet.</p>
               )}
             </div>
+            )}
           </div>
 
           <hr className="border-gray-100" />
           
           <div>
             <div className="flex justify-between items-center mb-4">
-              <div className="flex flex-col">
-                <h3 className="text-xl font-serif text-brand-dark">Exact Unit Inventory</h3>
+              <div 
+                className="flex flex-col cursor-pointer flex-1"
+                onClick={() => setIsUnitInventoryOpen(!isUnitInventoryOpen)}
+              >
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-serif text-brand-dark hover:text-brand-primary transition-colors">Exact Unit Inventory</h3>
+                  <ChevronDown className={`text-gray-400 transition-transform ${isUnitInventoryOpen ? 'rotate-180' : ''}`} size={20} />
+                </div>
                 <p className="text-sm text-gray-500 mt-1">Define the actual physical units in the building. Admins select these when making a booking.</p>
               </div>
               <button 
@@ -746,6 +767,7 @@ export default function PropertyForm() {
                     ...prev,
                     inventory: [...(prev.inventory || []), { id: Math.random().toString(36).substr(2, 9), floor: '', unitName: '', unitType: '', status: 'Available' }]
                   }));
+                  setIsUnitInventoryOpen(true);
                   setIsDirty(true);
                 }}
                 className="bg-brand-primary text-white px-3 py-1 text-sm font-bold rounded flex items-center gap-1 hover:bg-brand-dark"
@@ -753,6 +775,8 @@ export default function PropertyForm() {
                 <Plus size={16} /> Add Inventory Unit
               </button>
             </div>
+            
+            {isUnitInventoryOpen && (
             <div className="space-y-4">
               {(formData.inventory || []).map((unit, idx) => (
                 <div key={unit.id} className="flex flex-wrap md:flex-nowrap gap-3 bg-gray-50 p-4 rounded border border-gray-200 relative">
@@ -818,14 +842,21 @@ export default function PropertyForm() {
                 <p className="text-gray-400 text-sm italic">No specific units defined yet. You can pre-define them here so admins can select them when booking.</p>
               )}
             </div>
+            )}
           </div>
 
           <hr className="border-gray-100" />
           
           <div>
             <div className="flex justify-between items-center mb-4">
-              <div className="flex flex-col">
-                <h3 className="text-xl font-serif text-brand-dark">Parking Inventory</h3>
+              <div 
+                className="flex flex-col cursor-pointer flex-1"
+                onClick={() => setIsParkingInventoryOpen(!isParkingInventoryOpen)}
+              >
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-serif text-brand-dark hover:text-brand-primary transition-colors">Parking Inventory</h3>
+                  <ChevronDown className={`text-gray-400 transition-transform ${isParkingInventoryOpen ? 'rotate-180' : ''}`} size={20} />
+                </div>
                 <p className="text-sm text-gray-500 mt-1">Define individual parking spots so they can be tracked and assigned to clients without duplication. Each spot gets a unique ID.</p>
               </div>
               <button 
@@ -842,6 +873,7 @@ export default function PropertyForm() {
                       assignedBookingId: null
                     }]
                   }));
+                  setIsParkingInventoryOpen(true);
                   setIsDirty(true);
                 }}
                 className="bg-brand-primary text-white px-3 py-1 text-sm font-bold rounded flex items-center gap-1 hover:bg-brand-dark"
@@ -849,6 +881,8 @@ export default function PropertyForm() {
                 <Plus size={16} /> Add Parking Spot
               </button>
             </div>
+            
+            {isParkingInventoryOpen && (
             <div className="space-y-3">
               {(formData.parkingInventory || []).map((spot, idx) => (
                 <div key={spot.id} className={`flex flex-wrap md:flex-nowrap gap-3 p-4 rounded border relative ${spot.status === 'Assigned' ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
@@ -910,6 +944,7 @@ export default function PropertyForm() {
                 <p className="text-gray-400 text-sm italic">No parking spots defined yet. Click "Add Parking Spot" to define individual spots that can be tracked and assigned.</p>
               )}
             </div>
+            )}
           </div>
 
           <hr className="border-gray-100" />
