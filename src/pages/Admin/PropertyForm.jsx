@@ -9,6 +9,9 @@ import { usePropertyTypes } from '../../hooks/usePropertyTypes';
 import { useGlobalState } from '../../context/GlobalState';
 import { AVAILABLE_ICONS } from '../../utils/iconLibrary';
 import { deleteCloudinaryMedia, deleteCloudinaryMediaBeacon } from '../../utils/cloudinary';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const AVAILABLE_AMENITIES = [
   '24/7 Security', 'Smart Home Ready', 'Dedicated Parking', 'Green Spaces',
@@ -18,6 +21,42 @@ const AVAILABLE_AMENITIES = [
   'Business Lounge', 'EV Charging Station', 'Helipad', "Servant's Quarters",
   'Pet-Friendly Areas', 'Waste Management', 'Home Theater', 'Jacuzzi'
 ];
+
+const SortableGalleryItem = ({ url, idx, removeGalleryImage }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: url });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1 : 0,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      className="relative group rounded-md overflow-hidden border border-gray-200 aspect-square bg-white"
+    >
+      <div {...attributes} {...listeners} className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing"></div>
+      <img src={url} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover relative z-0 pointer-events-none" />
+      <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none z-10">
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            removeGalleryImage(url);
+          }}
+          className="bg-red-500 hover:bg-red-600 text-white rounded-full p-2 pointer-events-auto shadow-sm"
+          title="Remove Image"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default function PropertyForm() {
   const { id } = useParams();
@@ -383,6 +422,37 @@ export default function PropertyForm() {
       if (!window.confirm("You have unsaved changes. Are you sure you want to leave this page?")) return;
     }
     navigate('/admin/dashboard');
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      setFormData((prev) => {
+        const oldIndex = prev.images.gallery.indexOf(active.id);
+        const newIndex = prev.images.gallery.indexOf(over.id);
+        
+        return {
+          ...prev,
+          images: {
+            ...prev.images,
+            gallery: arrayMove(prev.images.gallery, oldIndex, newIndex)
+          }
+        };
+      });
+      setIsDirty(true);
+    }
   };
 
   return (
@@ -1256,23 +1326,15 @@ export default function PropertyForm() {
               </div>
 
               {formData.images.gallery && formData.images.gallery.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {formData.images.gallery.map((url, idx) => (
-                    <div key={idx} className="relative group rounded-md overflow-hidden border border-gray-200 aspect-square">
-                      <img src={url} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button
-                          type="button"
-                          onClick={() => removeGalleryImage(url)}
-                          className="bg-red-500 hover:bg-red-600 text-white rounded-full p-2"
-                          title="Remove Image"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={formData.images.gallery} strategy={rectSortingStrategy}>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+                      {formData.images.gallery.map((url, idx) => (
+                        <SortableGalleryItem key={url} url={url} idx={idx} removeGalleryImage={removeGalleryImage} />
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </SortableContext>
+                </DndContext>
               )}
             </div>
             
