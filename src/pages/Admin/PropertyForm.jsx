@@ -92,6 +92,7 @@ export default function PropertyForm() {
     architect: '',
     parkingAvailable: '',
     parkingPrice: '',
+    passengerLifts: '',
     frontRoadSize: '',
     totalShare: '',
     landmarks: '',
@@ -410,7 +411,7 @@ export default function PropertyForm() {
       navigate('/admin/dashboard');
     } catch (error) {
       console.error(error);
-      toast.error("Error saving property");
+      toast.error(error.message ? `Error saving property: ${error.message}` : "Error saving property");
       setBypassUnsavedGuard(false);
     } finally {
       setLoading(false);

@@ -59,10 +59,18 @@ export default function AdminDashboard() {
         // Gather all associated Cloudinary media for recursive deletion
         const allMediaUrls = [];
         
-        // 1. Core images (hero, map)
+        // 1. Core images (hero, map, floorPlan, video, etc) and gallery arrays
         if (property.images) {
-          Object.values(property.images).forEach(url => {
-            if (url && url.includes('cloudinary.com')) allMediaUrls.push(url);
+          Object.values(property.images).forEach(val => {
+            if (Array.isArray(val)) {
+              val.forEach(url => {
+                if (url && typeof url === 'string' && url.includes('cloudinary.com')) {
+                  allMediaUrls.push(url);
+                }
+              });
+            } else if (val && typeof val === 'string' && val.includes('cloudinary.com')) {
+              allMediaUrls.push(val);
+            }
           });
         }
         
