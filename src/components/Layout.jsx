@@ -29,16 +29,6 @@ export default function Layout() {
     
     setIsSubscribing(true);
     try {
-      const q = query(collection(db, 'newsletter_subscribers'), where('email', '==', email));
-      const snap = await getDocs(q);
-      
-      if (!snap.empty) {
-        toast.info("You are already subscribed to our exclusive newsletter.");
-        setEmail('');
-        setIsSubscribing(false);
-        return;
-      }
-      
       await addDoc(collection(db, 'newsletter_subscribers'), {
         email,
         subscribedAt: serverTimestamp(),
