@@ -254,13 +254,21 @@ export default function Projects() {
     <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
       {/* Hero */}
-      <div style={{ background: '#0a1628', padding: '56px 24px', textAlign: 'center' }}>
-        <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(26px, 5vw, 46px)', color: '#c9a84c', marginBottom: '12px', fontWeight: '700' }}>
-          Discover Your Next Home
-        </h1>
-        <p style={{ color: '#c9d1d9', fontSize: '16px', maxWidth: '540px', margin: '0 auto', lineHeight: '1.7' }}>
-          Search and filter our exclusive collection of masterfully designed properties.
-        </p>
+      <div className="relative min-h-[45vh] flex items-center justify-center text-center px-4" style={{
+        backgroundImage: "url('https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}>
+        <div className="absolute inset-0 bg-brand-dark/85 backdrop-blur-[2px]"></div>
+        <div className="relative z-10 max-w-4xl mx-auto">
+          <h1 className="text-4xl md:text-6xl font-serif text-brand-accent mb-6 tracking-wide drop-shadow-lg font-bold">
+            Discover Your Next Home
+          </h1>
+          <p className="text-lg md:text-xl text-brand-neutral max-w-2xl mx-auto font-light leading-relaxed opacity-90">
+            Explore our curated portfolio of architectural masterpieces and secure your legacy in the city's most prestigious neighborhoods.
+          </p>
+        </div>
       </div>
 
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '36px 24px' }}>
