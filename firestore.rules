@@ -79,14 +79,14 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin() || (isSignedIn() && resource.data.linkedUserId == request.auth.uid);
     }
     
-    // Collection: messages (Public create, Admin read/write)
-    match /messages/{messageId} {
+    // Collection: inquiries (Public create, Admin read/write)
+    match /inquiries/{inquiryId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
     
-    // Collection: newsletters (Public create, Admin read/write)
-    match /newsletters/{emailId} {
+    // Collection: newsletter_subscribers (Public create, Admin read/write)
+    match /newsletter_subscribers/{subscriberId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
