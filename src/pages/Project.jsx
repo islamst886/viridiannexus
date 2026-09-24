@@ -174,16 +174,6 @@ function ProjectContent() {
     // Scroll to top automatically handled by ScrollToTop component
   }, [id]);
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-brand-neutral"><div className="animate-spin text-brand-primary">Loading...</div></div>;
-  }
-
-  if (!projectData) {
-    return <Navigate to="/" />;
-  }
-
-  const isSaved = wishlist.some(p => p.id === projectData.id);
-
   const displayStatus = React.useMemo(() => {
     if (!projectData) return '';
     if (projectData.inventory && projectData.inventory.length > 0) {
@@ -195,6 +185,16 @@ function ProjectContent() {
 
   const specs = React.useMemo(() => formatPropertySpecs(projectData), [projectData]);
   const priceStr = React.useMemo(() => formatPropertyPrice(projectData), [projectData]);
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-brand-neutral"><div className="animate-spin text-brand-primary">Loading...</div></div>;
+  }
+
+  if (!projectData) {
+    return <Navigate to="/" />;
+  }
+
+  const isSaved = wishlist.some(p => p.id === projectData.id);
 
   return (
     <div className="bg-brand-neutral min-h-screen pb-20">
