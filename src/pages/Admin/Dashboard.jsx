@@ -181,7 +181,10 @@ export default function AdminDashboard() {
             p.name?.toLowerCase().includes(q) ||
             p.location?.toLowerCase().includes(q) ||
             p.status?.toLowerCase().includes(q) ||
-            p.propertyType?.toLowerCase().includes(q)
+            (() => {
+              const pTypesStr = Array.isArray(p.propertyType) ? p.propertyType.join(' ') : (p.propertyType || '');
+              return pTypesStr.toLowerCase().includes(q);
+            })()
           );
           return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -207,7 +210,11 @@ export default function AdminDashboard() {
                   <tr key={prop.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-brand-dark">{prop.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{prop.location}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{prop.propertyType || <span className="italic text-gray-300">—</span>}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {Array.isArray(prop.propertyType) 
+                        ? (prop.propertyType.length > 0 ? prop.propertyType.join(', ') : <span className="italic text-gray-300">—</span>)
+                        : (prop.propertyType || <span className="italic text-gray-300">—</span>)}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-brand-primary font-semibold">{prop.price}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">

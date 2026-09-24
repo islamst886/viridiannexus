@@ -26,9 +26,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // Collection: meta (Admin read/write)
+    // Collection: meta and settings (Admin read/write)
     match /meta/{docId} {
       allow read, write: if isAdmin();
+    }
+    
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // Collection: users (Self read/write, Admin read, SuperAdmin write)

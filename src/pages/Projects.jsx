@@ -212,7 +212,8 @@ export default function Projects() {
       const com    = selectedCommunities.length === 0 || selectedCommunities.includes(p.location);
       const dStatus = (p.inventory && p.inventory.length > 0 && !p.inventory.some(inv => inv.status === 'Available')) ? 'Sold Out' : p.status;
       const status = selectedStatus.length === 0 || selectedStatus.includes(dStatus);
-      const type   = selectedTypes.length === 0 || selectedTypes.includes(p.propertyType);
+      const pTypes = Array.isArray(p.propertyType) ? p.propertyType : (p.propertyType ? [p.propertyType] : []);
+      const type   = selectedTypes.length === 0 || selectedTypes.some(t => pTypes.includes(t));
       const price  = activePriceRanges.length === 0 || (() => {
         const pricesToCheck = [];
         const baseVal = parsePriceTk(p.price);

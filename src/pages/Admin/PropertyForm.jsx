@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../../firebase';
+import { db, storage } from '../../firebase';
 import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ArrowLeft, Save, CheckSquare, Plus, Trash2, FileText, Tag, X, ChevronDown, AlertTriangle } from 'lucide-react';
@@ -36,7 +37,7 @@ export default function PropertyForm() {
     location: '',
     price: '',
     status: 'Ready',
-    propertyType: '',
+    propertyType: [],
     beds: 0,
     baths: 0,
     sqft: '',
@@ -57,6 +58,7 @@ export default function PropertyForm() {
       hero: '',
       map: '',
       video: '',
+      gallery: []
     }
   });
 
@@ -105,7 +107,7 @@ export default function PropertyForm() {
           customAmenities: data.customAmenities || [],
           availableUnits: data.availableUnits || [],
           inventory: data.inventory || [],
-          propertyType: data.propertyType || '',
+          propertyType: Array.isArray(data.propertyType) ? data.propertyType : (data.propertyType ? [data.propertyType] : []),
           buildingType: data.buildingType || '',
           unitsPerFloor: data.unitsPerFloor || '',
           passengerLifts: data.passengerLifts || '',
@@ -115,7 +117,13 @@ export default function PropertyForm() {
           googleMapLink: data.googleMapLink || '',
           completionDate: data.completionDate || '',
           overview: data.overview || '',
-          brochureUrl: data.brochureUrl || ''
+          brochureUrl: data.brochureUrl || '',
+          images: {
+            hero: data.images?.hero || '',
+            map: data.images?.map || '',
+            video: data.images?.video || '',
+            gallery: data.images?.gallery || [],
+          }
         });
       } else {
         toast.error("Property not found");
@@ -148,12 +156,15 @@ export default function PropertyForm() {
     setIsDirty(true);
   };
 
-  const handleFileUpload = async (e, mediaType) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleGalleryUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
 
-    setUploadingImage(mediaType);
-    toast.info(`Uploading ${mediaType}...`);
+    setUploadingImage('gallery');
+    toast.info(`Uploading ${files.length} image(s) to gallery...`);
+
+    const newGalleryUrls = [];
+
     try {
       const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
       const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
@@ -162,7 +173,96 @@ export default function PropertyForm() {
         throw new Error("Cloudinary keys are missing in the .env file!");
       }
 
-      // 'auto' safely handles images, videos, and PDFs
+      const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+
+      for (const file of files) {
+        const uploadData = new FormData();
+        uploadData.append('file', file);
+        uploadData.append('upload_preset', uploadPreset);
+
+        const res = await fetch(url, { method: 'POST', body: uploadData });
+        const data = await res.json();
+        
+        if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+        
+        setNewlyUploadedMedia(prev => [...prev, data.secure_url]);
+        newGalleryUrls.push(data.secure_url);
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        images: {
+          ...prev.images,
+          gallery: [...(prev.images?.gallery || []), ...newGalleryUrls]
+        }
+      }));
+      setIsDirty(true);
+      toast.success(`Gallery uploaded successfully!`);
+    } catch (error) {
+      toast.error(`Error uploading gallery: ${error.message}`);
+      console.error(error);
+    } finally {
+      setUploadingImage(null);
+    }
+  };
+
+  const removeGalleryImage = (urlToRemove) => {
+    if (!window.confirm("Are you sure you want to remove this gallery image?")) return;
+    if (urlToRemove?.includes('cloudinary.com')) {
+      setMediaToDelete(prev => [...prev, urlToRemove]);
+    }
+    setFormData(prev => ({
+      ...prev,
+      images: {
+        ...prev.images,
+        gallery: (prev.images?.gallery || []).filter(url => url !== urlToRemove)
+      }
+    }));
+    setIsDirty(true);
+  };
+
+  const handleFileUpload = async (e, mediaType) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingImage(mediaType);
+    toast.info(`Uploading ${mediaType}...`);
+    try {
+      // Use Firebase Storage for brochure to bypass Cloudinary PDF delivery restrictions on free accounts
+      if (mediaType === 'brochure') {
+        const storageRef = ref(storage, `brochures/${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        
+        const oldBrochure = formData.brochureUrl;
+        if (oldBrochure) {
+          if (oldBrochure.includes('cloudinary.com')) {
+            setMediaToDelete(prev => [...prev, oldBrochure]);
+          } else if (oldBrochure.includes('firebasestorage')) {
+            try {
+              const oldRef = ref(storage, oldBrochure);
+              await deleteObject(oldRef);
+            } catch (err) {
+              console.error("Failed to delete old brochure from Firebase", err);
+            }
+          }
+        }
+        
+        setFormData(prev => ({ ...prev, brochureUrl: url }));
+        setIsDirty(true);
+        toast.success(`Brochure uploaded successfully!`);
+        return;
+      }
+
+      // Default Cloudinary Upload
+      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+      
+      if (!cloudName || !uploadPreset) {
+        throw new Error("Cloudinary keys are missing in the .env file!");
+      }
+
+      // 'auto' safely handles images, videos
       const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
 
       const uploadData = new FormData();
@@ -174,18 +274,6 @@ export default function PropertyForm() {
       
       if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
       
-      // Handle brochure specifically
-      if (mediaType === 'brochure') {
-        const oldBrochure = formData.brochureUrl;
-        if (oldBrochure && oldBrochure.includes('cloudinary.com')) {
-          setMediaToDelete(prev => [...prev, oldBrochure]);
-        }
-        setNewlyUploadedMedia(prev => [...prev, data.secure_url]);
-        setFormData(prev => ({ ...prev, brochureUrl: data.secure_url }));
-        toast.success(`Brochure uploaded successfully!`);
-        return;
-      }
-
       const oldUrl = formData.images[mediaType];
       if (oldUrl && oldUrl.includes('cloudinary.com')) {
         setMediaToDelete(prev => [...prev, oldUrl]);
@@ -331,21 +419,33 @@ export default function PropertyForm() {
             </div>
 
             <div className="md:col-span-2 space-y-6">
-              <div>
-                <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Status</label>
-                <select 
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary"
-                >
-                  <option value="Ready">Ready</option>
-                  <option value="Ongoing">Ongoing</option>
-                  <option value="Upcoming">Upcoming</option>
-                  <option value="Under Construction">Under Construction</option>
-                  <option value="On Sale">On Sale</option>
-                  <option value="Sold Out">Sold Out</option>
-                </select>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Property Types</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-gray-50 p-4 rounded border border-gray-200">
+                  {localPropertyTypes.map(type => (
+                    <label key={type} className="flex items-center space-x-2 cursor-pointer group">
+                      <input 
+                        type="checkbox" 
+                        checked={(formData.propertyType || []).includes(type)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData(prev => {
+                            const prevTypes = prev.propertyType || [];
+                            return {
+                              ...prev,
+                              propertyType: checked 
+                                ? [...prevTypes, type] 
+                                : prevTypes.filter(t => t !== type)
+                            };
+                          });
+                          setIsDirty(true);
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-brand-primary focus:ring-brand-primary cursor-pointer"
+                      />
+                      <span className="text-sm font-semibold text-gray-700 group-hover:text-brand-primary transition-colors">{type}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -395,7 +495,13 @@ export default function PropertyForm() {
                         if (customTypeInput.trim()) {
                           const newType = customTypeInput.trim();
                           setLocalPropertyTypes(prev => [...new Set([...prev, newType])].sort());
-                          setFormData(prev => ({ ...prev, propertyType: newType }));
+                          setFormData(prev => {
+                            const prevTypes = prev.propertyType || [];
+                            return {
+                              ...prev,
+                              propertyType: prevTypes.includes(newType) ? prevTypes : [...prevTypes, newType]
+                            };
+                          });
                           setIsDirty(true);
                           setCustomTypeInput('');
                         }
@@ -410,11 +516,17 @@ export default function PropertyForm() {
                       if (!customTypeInput.trim()) return;
                       const newType = customTypeInput.trim();
                       setLocalPropertyTypes(prev => [...new Set([...prev, newType])].sort());
-                      setFormData(prev => ({ ...prev, propertyType: newType }));
+                      setFormData(prev => {
+                        const prevTypes = prev.propertyType || [];
+                        return {
+                          ...prev,
+                          propertyType: prevTypes.includes(newType) ? prevTypes : [...prevTypes, newType]
+                        };
+                      });
                       setIsDirty(true);
                       setCustomTypeInput('');
                     }}
-                    className="flex items-center gap-1 bg-brand-primary text-white px-3 py-2 rounded text-xs font-bold hover:bg-brand-dark transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1 bg-brand-primary text-white px-3 py-2 rounded text-xs font-bold hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Plus size={14} /> Add
                   </button>
@@ -895,6 +1007,57 @@ export default function PropertyForm() {
               )}
             </div>
             
+            {/* GALLERY SECTION */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <label className="block text-sm font-bold text-brand-primary uppercase tracking-wider mb-4 border-b pb-3">Image Gallery</label>
+              
+              <div className="mb-4">
+                <div className="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-gray-50 hover:bg-gray-100 transition-colors relative">
+                  <div className="space-y-1 text-center">
+                    {uploadingImage === 'gallery' ? (
+                      <div className="flex flex-col items-center py-4">
+                        <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin mb-2"></div>
+                        <p className="text-sm text-brand-primary font-bold">Uploading...</p>
+                      </div>
+                    ) : (
+                      <>
+                        <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                          <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <div className="flex text-sm text-gray-600 justify-center">
+                          <label className="relative cursor-pointer bg-white rounded-md font-medium text-brand-primary hover:text-brand-dark focus-within:outline-none px-2 py-1">
+                            <span>Upload multiple images</span>
+                            <input type="file" className="sr-only" accept="image/*" multiple disabled={uploadingImage !== null} onChange={handleGalleryUpload} />
+                          </label>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB each</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {formData.images.gallery && formData.images.gallery.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {formData.images.gallery.map((url, idx) => (
+                    <div key={idx} className="relative group rounded-md overflow-hidden border border-gray-200 aspect-square">
+                      <img src={url} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => removeGalleryImage(url)}
+                          className="bg-red-500 hover:bg-red-600 text-white rounded-full p-2"
+                          title="Remove Image"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
             {/* VIDEO SECTION */}
             <div>
               <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Property Video (YouTube URL)</label>
@@ -917,15 +1080,15 @@ export default function PropertyForm() {
               
               <div className="space-y-6">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 1: External Link (For files &gt; 10MB)</label>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 1: External Link</label>
                   <p className="text-xs text-gray-500 mb-3">Paste a public Google Drive or Dropbox link here.</p>
                   
-                  {formData.brochureUrl && formData.brochureUrl.includes('cloudinary') ? (
+                  {formData.brochureUrl && (formData.brochureUrl.includes('cloudinary') || formData.brochureUrl.includes('firebasestorage')) ? (
                     <div className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-md">
                        <div className="flex items-center gap-3">
                          <FileText size={24} className="text-indigo-500" />
                          <div className="flex flex-col">
-                           <span className="text-sm text-indigo-900 font-bold">Uploaded to Cloudinary</span>
+                           <span className="text-sm text-indigo-900 font-bold">Uploaded Document</span>
                            <a href={formData.brochureUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 underline">View PDF</a>
                          </div>
                        </div>
@@ -933,7 +1096,16 @@ export default function PropertyForm() {
                          type="button"
                          onClick={() => {
                            if (window.confirm("Are you sure you want to remove this brochure file?")) {
-                             if (formData.brochureUrl?.includes('cloudinary.com')) setMediaToDelete(prev => [...prev, formData.brochureUrl]);
+                             if (formData.brochureUrl?.includes('cloudinary.com')) {
+                               setMediaToDelete(prev => [...prev, formData.brochureUrl]);
+                             } else if (formData.brochureUrl?.includes('firebasestorage')) {
+                               try {
+                                 const oldRef = ref(storage, formData.brochureUrl);
+                                 deleteObject(oldRef).catch(console.error);
+                               } catch (e) {
+                                 console.error("Firebase deletion error:", e);
+                               }
+                             }
                              setFormData(p => ({...p, brochureUrl: ''}));
                              setIsDirty(true);
                            }
@@ -957,7 +1129,7 @@ export default function PropertyForm() {
                   )}
                 </div>
 
-                {!formData.brochureUrl?.includes('cloudinary') && (
+                {!formData.brochureUrl?.includes('cloudinary') && !formData.brochureUrl?.includes('firebasestorage') && (
                   <>
                     <div className="relative flex py-2 items-center">
                       <div className="flex-grow border-t border-gray-200"></div>
@@ -966,7 +1138,7 @@ export default function PropertyForm() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 2: Direct Upload (Max 10MB)</label>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 2: Direct Upload (Firebase Storage)</label>
                       <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-gray-50 hover:bg-gray-100 transition-colors">
                         <div className="space-y-1 text-center">
                           {uploadingImage === 'brochure' ? (
@@ -983,7 +1155,7 @@ export default function PropertyForm() {
                                   <input type="file" className="sr-only" accept=".pdf" disabled={uploadingImage !== null} onChange={(e) => handleFileUpload(e, 'brochure')} />
                                 </label>
                               </div>
-                              <p className="text-xs text-gray-500 mt-2">PDF up to 10MB</p>
+                              <p className="text-xs text-gray-500 mt-2">Any size PDF supported</p>
                             </>
                           )}
                         </div>

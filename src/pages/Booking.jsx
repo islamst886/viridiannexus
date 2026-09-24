@@ -7,8 +7,8 @@ import { useGlobalState } from '../context/GlobalState';
 
 const STEPS = [
   { id: 1, label: 'Select Property', icon: Building2 },
-  { id: 2, label: 'Your Details',   icon: User },
-  { id: 3, label: 'Confirmation',   icon: CreditCard },
+  { id: 2, label: 'Your Details', icon: User },
+  { id: 3, label: 'Confirmation', icon: CreditCard },
 ];
 
 const inputStyle = {
@@ -72,11 +72,11 @@ export default function Booking() {
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedUnit, setSelectedUnit] = useState('');
   const [form, setForm] = useState({
-    firstName: userProfile?.displayName?.split(' ')[0] || '', 
-    lastName: userProfile?.displayName?.split(' ').slice(1).join(' ') || '', 
-    email: userProfile?.email || '', 
-    phone: userProfile?.phone || '', 
-    nid: '', 
+    firstName: userProfile?.displayName?.split(' ')[0] || '',
+    lastName: userProfile?.displayName?.split(' ').slice(1).join(' ') || '',
+    email: userProfile?.email || '',
+    phone: userProfile?.phone || '',
+    nid: '',
     address: '',
   });
   const [errors, setErrors] = useState({});
@@ -325,7 +325,7 @@ export default function Booking() {
           {step === 3 && (
             <div>
               <h2 style={{ fontFamily: 'Georgia, serif', fontSize: '24px', color: '#0a1628', marginBottom: '28px', fontWeight: '700' }}>Confirm Reservation</h2>
-              
+
               {/* Summary Box */}
               <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '24px', marginBottom: '28px' }}>
                 <h3 style={{ fontWeight: '800', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#166534', marginBottom: '16px' }}>Reservation Summary</h3>

@@ -4,8 +4,9 @@ import {
   Shield, Wifi, Car, Trees, Maximize, Home, Coffee, Info, Map, 
   LayoutDashboard, Heart, Waves, Dumbbell, Flower2, ArrowUpCircle, 
   UserCircle, Zap, Sun, Video, Flame, Droplets, Smile, Baby, 
-  Briefcase, BatteryCharging, Navigation, Users, Dog, Trash, Film, FileText, Download, Loader2, Clock
+  Briefcase, BatteryCharging, Navigation, Users, Dog, Trash, Film, FileText, Download, Loader2, Clock, ChevronLeft, ChevronRight, X, Image as ImageIcon
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useGlobalState } from '../context/GlobalState';
 import { formatPropertyPrice, formatPropertySpecs, parsePriceTk, formatPriceBangladeshi } from '../utils/propertyFormatting';
 import { AVAILABLE_ICONS } from '../utils/iconLibrary';
@@ -96,6 +97,35 @@ function ProjectContent() {
   const [inquiryData, setInquiryData] = useState({ name: '', phone: '', email: '', message: '' });
   const [submittingInquiry, setSubmittingInquiry] = useState(false);
   const [agreedToPolicy, setAgreedToPolicy] = useState(false);
+
+  // Lightbox State
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const openLightbox = (index) => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+    document.body.style.overflow = 'hidden';
+  };
+
+  const closeLightbox = () => {
+    setLightboxOpen(false);
+    document.body.style.overflow = 'auto';
+  };
+
+  const handleNextImage = (e) => {
+    e?.stopPropagation();
+    if (projectData?.images?.gallery) {
+      setLightboxIndex((prev) => (prev + 1) % projectData.images.gallery.length);
+    }
+  };
+
+  const handlePrevImage = (e) => {
+    e?.stopPropagation();
+    if (projectData?.images?.gallery) {
+      setLightboxIndex((prev) => (prev - 1 + projectData.images.gallery.length) % projectData.images.gallery.length);
+    }
+  };
 
   useEffect(() => {
     if (isLoggedIn && userProfile) {
@@ -374,6 +404,75 @@ function ProjectContent() {
               </section>
             )}
 
+            {/* Image Gallery Section */}
+            {projectData.images?.gallery && projectData.images.gallery.length > 0 && (
+              <section className="mb-12">
+                <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3 flex items-center gap-2">
+                  <ImageIcon className="text-brand-primary" size={24} /> Project Gallery
+                </h2>
+                
+                {/* Premium Collage Layout */}
+                <div className="grid grid-cols-4 md:grid-rows-2 gap-2 md:gap-3 md:h-[450px] lg:h-[550px] rounded-2xl overflow-hidden">
+                  {projectData.images.gallery.slice(0, 5).map((imgUrl, idx) => {
+                    const total = Math.min(projectData.images.gallery.length, 5);
+                    const extraCount = projectData.images.gallery.length - 5;
+                    const isLast = idx === 4;
+                    
+                    let desktop = '';
+                    if (total === 1) desktop = 'md:col-span-4 md:row-span-2';
+                    else if (total === 2) desktop = 'md:col-span-2 md:row-span-2';
+                    else if (total === 3) {
+                      if (idx === 0) desktop = 'md:col-span-2 md:row-span-2';
+                      else desktop = 'md:col-span-2 md:row-span-1';
+                    }
+                    else if (total === 4) {
+                      if (idx === 0) desktop = 'md:col-span-2 md:row-span-2';
+                      else if (idx === 1) desktop = 'md:col-span-2 md:row-span-1';
+                      else desktop = 'md:col-span-1 md:row-span-1';
+                    }
+                    else {
+                      if (idx === 0) desktop = 'md:col-span-2 md:row-span-2';
+                      else desktop = 'md:col-span-1 md:row-span-1';
+                    }
+                    
+                    const mobile = idx === 0 ? 'col-span-4 row-span-2 h-[250px] md:h-auto' : 'hidden md:block';
+
+                    return (
+                      <div 
+                        key={idx}
+                        onClick={() => openLightbox(idx)}
+                        className={`${mobile} ${desktop} relative group cursor-pointer overflow-hidden bg-gray-100`}
+                      >
+                        <img 
+                          src={imgUrl} 
+                          alt={`Gallery Image ${idx + 1}`} 
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+                        />
+                        
+                        {/* Hover Overlay */}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center">
+                          {isLast && extraCount > 0 ? (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                              <span className="text-white font-bold text-lg md:text-xl">+{extraCount} Photos</span>
+                            </div>
+                          ) : (
+                            <Maximize className="text-white drop-shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" size={32} />
+                          )}
+                        </div>
+
+                        {/* Mobile 'View All' Button (only on first image if multiple exist) */}
+                        {idx === 0 && projectData.images.gallery.length > 1 && (
+                          <div className="md:hidden absolute bottom-4 right-4 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow font-bold text-sm text-brand-dark flex items-center gap-2">
+                            <ImageIcon size={16} /> View all {projectData.images.gallery.length} photos
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
             {/* Video Tour Section (if uploaded) */}
             {projectData.images?.video && (
               <section>
@@ -594,6 +693,62 @@ function ProjectContent() {
 
         </div>
       </div>
+      
+      {/* Full-screen Lightbox */}
+      <AnimatePresence>
+        {lightboxOpen && projectData.images?.gallery && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md"
+            onClick={closeLightbox}
+          >
+            <div className="absolute top-6 right-6 z-10">
+              <button 
+                onClick={closeLightbox}
+                className="bg-white/10 hover:bg-white/20 text-white rounded-full p-2 backdrop-blur-sm transition-colors"
+              >
+                <X size={28} />
+              </button>
+            </div>
+            
+            <button
+              onClick={handlePrevImage}
+              className="absolute left-4 md:left-12 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors z-10"
+            >
+              <ChevronLeft size={36} />
+            </button>
+            
+            <motion.div 
+              key={lightboxIndex}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="w-full max-w-5xl max-h-[85vh] px-4 flex items-center justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img 
+                src={projectData.images.gallery[lightboxIndex]} 
+                alt={`Gallery ${lightboxIndex + 1}`} 
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+              />
+            </motion.div>
+            
+            <button
+              onClick={handleNextImage}
+              className="absolute right-4 md:right-12 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors z-10"
+            >
+              <ChevronRight size={36} />
+            </button>
+            
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white font-medium tracking-widest text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">
+              {lightboxIndex + 1} / {projectData.images.gallery.length}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
