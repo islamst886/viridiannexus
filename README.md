@@ -10,7 +10,7 @@ If you are setting up this project from scratch for a new client or on a new set
 1. Go to the [Firebase Console](https://console.firebase.google.com/) and create a new project.
 2. **Enable Authentication**: Go to Build -> Authentication. Enable the **Email/Password** sign-in provider.
 3. **Enable Firestore Database**: Go to Build -> Firestore Database. Create a database in production mode.
-   - **Important Security Rules**: Update your Firestore rules to protect data. Standard setup restricts writes to authenticated admin users, while allowing public reads for properties.
+   - **CRITICAL SECURITY STEP**: By default, Firebase will set your rules to "Test Mode" which leaves your database completely open to hackers. You MUST open the `firestore.rules` file located in the root of this project, copy all of the code inside it, and paste it into the **Rules** tab of your Firestore Database in the Firebase Console. Hit **Publish**.
 4. **Enable Firebase Storage**: Go to Build -> Storage. *(Note: We use this specifically for uploading large PDF project brochures because Cloudinary restricts PDF delivery on their free tier).*
 5. **Get Project Settings**: Go to Project Settings (gear icon) -> General. Scroll down to "Your apps" and create a new Web App (</>). Copy the `firebaseConfig` object values into your local `.env` file (refer to `.env.example`).
 
