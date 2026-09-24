@@ -101,11 +101,10 @@ export default function AdminMessages() {
                         </div>
                         
                         <div>
-                          <div className="text-sm text-gray-700 font-medium">
-                            {inquiry.propertyName ? (
-                              <span className="text-brand-primary font-bold">Property: {inquiry.propertyName}</span>
-                            ) : (
-                              <span>Topic: {inquiry.inquiryType || 'General'}</span>
+                          <div className="text-sm text-gray-700 font-medium flex flex-col gap-1">
+                            <span>Topic: <span className="font-bold">{inquiry.inquiryType || 'General'}</span></span>
+                            {inquiry.propertyName && (
+                              <span className="text-brand-primary text-xs">Property: <span className="font-bold">{inquiry.propertyName}</span></span>
                             )}
                           </div>
                         </div>

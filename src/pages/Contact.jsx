@@ -72,6 +72,7 @@ export default function Contact() {
     try {
       await addDoc(collection(db, 'inquiries'), {
         ...formData,
+        propertyName: propertyParam ? formatPropertyName(propertyParam) : null,
         status: 'Unread',
         source: 'Corporate Contact Page',
         createdAt: serverTimestamp()
