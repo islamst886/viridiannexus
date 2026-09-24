@@ -364,6 +364,7 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
       clientNid: '',
       clientAddress: '',
       linkedUserId: null,
+      parkingSpotIds: [],
       totalPrice: '',
       tokenAmount: '',
       downPaymentAmount: '',
@@ -489,14 +490,36 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
           throw new Error(`This unit is no longer available (Current status: ${inventory[invIndex].status}). Someone may have booked it just now.`);
         }
         
+        // --- VALIDATE & CLAIM PARKING SPOTS ---
+        let parkingInventory = propertyData.parkingInventory || [];
+        const selectedSpotIds = form.parkingSpotIds || [];
+        
+        for (const spotId of selectedSpotIds) {
+          const spotIdx = parkingInventory.findIndex(s => s.id === spotId);
+          if (spotIdx === -1) throw new Error(`Parking spot ${spotId} not found.`);
+          if (parkingInventory[spotIdx].status !== 'Available') {
+            throw new Error(`Parking spot "${parkingInventory[spotIdx].label}" is no longer available. Please select a different spot.`);
+          }
+        }
+        
         // Perform Writes
         transaction.set(counterRef, { value: currentVal }, { merge: true });
 
         inventory[invIndex].status = 'Booked';
-        transaction.update(propertyRef, { inventory });
+        
+        // Assign selected parking spots atomically
+        const bookingRefDoc = doc(collection(db, 'bookings'));
+        for (const spotId of selectedSpotIds) {
+          const spotIdx = parkingInventory.findIndex(s => s.id === spotId);
+          parkingInventory[spotIdx].status = 'Assigned';
+          parkingInventory[spotIdx].assignedBookingId = bookingRefDoc.id;
+        }
+        transaction.update(propertyRef, { inventory, parkingInventory });
 
         // 2. Create the main booking document
-        const bookingRefDoc = doc(collection(db, 'bookings'));
+        // (bookingRefDoc already created above for parking spot linking)
+        const selectedSpots = (propertyData.parkingInventory || []).filter(s => (form.parkingSpotIds || []).includes(s.id));
+        const parkingDisplayStr = selectedSpots.map(s => `${s.label}${s.level ? ` (${s.level})` : ''}`).join(', ') || null;
         const bookingData = {
           clientName: form.clientName,
           clientEmail: form.clientEmail,
@@ -515,6 +538,8 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
             ? (inventory[invIndex].unitName || '') 
             : `Unit ${inventory[invIndex].unitName || ''}`
           }`,
+          parkingSpotIds: form.parkingSpotIds || [],
+          parkingIncluded: parkingDisplayStr,
           
           totalPrice: Number(form.totalPrice),
           tokenAmount: Number(form.tokenAmount),
@@ -736,6 +761,52 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
                   <p className="mt-1">You must define specific units for this property in the Admin Panel before creating bookings.</p>
                 </div>
               ) : null}
+
+              {currentProperty && (currentProperty.parkingInventory || []).length > 0 && (() => {
+                const availableSpots = (currentProperty.parkingInventory || []).filter(s => s.status === 'Available');
+                const assignedSpots = (currentProperty.parkingInventory || []).filter(s => s.status === 'Assigned');
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-bold text-gray-700">Assign Parking Spot(s)</label>
+                      <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">{availableSpots.length} of {(currentProperty.parkingInventory || []).length} Available</span>
+                    </div>
+                    {availableSpots.length === 0 ? (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-bold">All parking spots are currently assigned to other clients.</div>
+                    ) : (
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        {availableSpots.map(spot => {
+                          const isChecked = (form.parkingSpotIds || []).includes(spot.id);
+                          return (
+                            <label key={spot.id} className={`flex items-center gap-4 p-3 cursor-pointer border-b last:border-0 transition-colors ${isChecked ? 'bg-brand-primary/10 border-brand-primary/20' : 'hover:bg-gray-50'}`}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const current = form.parkingSpotIds || [];
+                                  setForm({...form, parkingSpotIds: e.target.checked ? [...current, spot.id] : current.filter(id => id !== spot.id)});
+                                }}
+                                className="w-4 h-4 text-brand-primary rounded accent-brand-primary"
+                              />
+                              <div className="flex-1">
+                                <span className="font-bold text-sm text-gray-900">{spot.label}</span>
+                                {(spot.level || spot.zone) && <span className="text-xs text-gray-500 ml-2">{[spot.level, spot.zone].filter(Boolean).join(' · ')}</span>}
+                              </div>
+                              <span className="text-xs font-mono text-gray-400">{spot.id}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {(form.parkingSpotIds || []).length > 0 && (
+                      <p className="mt-2 text-xs text-brand-primary font-bold">✓ {(form.parkingSpotIds || []).length} spot(s) selected — will be locked to this client atomically.</p>
+                    )}
+                    {assignedSpots.length > 0 && (
+                      <p className="mt-1 text-xs text-amber-600">🔒 {assignedSpots.length} spot(s) already assigned to other bookings are hidden.</p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

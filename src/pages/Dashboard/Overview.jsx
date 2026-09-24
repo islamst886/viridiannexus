@@ -188,7 +188,7 @@ export default function Overview() {
                           {booking.status}
                         </span>
                         <h3 className="text-lg font-bold text-gray-900 mt-3">{booking.propertyName}</h3>
-                        <p className="text-sm text-gray-500">{booking.unitType} {booking.unitNumber ? `- ${booking.unitNumber}` : ''}</p>
+                        <p className="text-sm text-gray-500">{booking.unitType} {booking.unitNumber ? `- ${booking.unitNumber}` : ''} {booking.parkingIncluded ? ` | 🚗 Parking: ${booking.parkingIncluded}` : ''}</p>
                       </div>
                       <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-brand-primary/10 group-hover:text-brand-primary transition-colors">
                         <ChevronRight size={20} />

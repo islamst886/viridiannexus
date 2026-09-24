@@ -37,11 +37,24 @@ export default function CancelBookingModal({ isOpen, onClose, booking, adminName
               delete targetUnit.bookingId;
               delete targetUnit.bookingRef;
               delete targetUnit.clientName;
-              txn.update(propRef, { 
-                inventory: inv, 
-                lastUpdatedAt: serverTimestamp() 
-              });
             }
+
+            // Release parking spots back to Available
+            const parkingInv = [...(pData.parkingInventory || [])];
+            const spotIds = booking.parkingSpotIds || [];
+            for (const spotId of spotIds) {
+              const spotIdx = parkingInv.findIndex(s => s.id === spotId);
+              if (spotIdx !== -1) {
+                parkingInv[spotIdx].status = 'Available';
+                parkingInv[spotIdx].assignedBookingId = null;
+              }
+            }
+
+            txn.update(propRef, { 
+              inventory: inv,
+              parkingInventory: parkingInv,
+              lastUpdatedAt: serverTimestamp() 
+            });
           }
           
           txn.update(doc(db, 'bookings', booking.id), {

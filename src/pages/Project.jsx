@@ -291,39 +291,67 @@ function ProjectContent() {
               <h2 className="text-2xl font-serif text-brand-dark mb-6 flex items-center gap-2 border-b border-gray-200 pb-3">
                 <Info className="text-brand-primary" /> Technical Details
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <div className="flex flex-col">
-                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Building Type</span>
-                  <span className="text-brand-dark font-semibold text-lg">{projectData.buildingType || 'N/A'}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Total Share</span>
-                  <span className="text-brand-dark font-semibold text-lg">{projectData.totalShare || 'N/A'}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Unit Per Floor</span>
-                  <span className="text-brand-dark font-semibold text-lg">{projectData.unitsPerFloor || 'N/A'}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Front Road</span>
-                  <span className="text-brand-dark font-semibold text-lg">{projectData.frontRoadSize || 'N/A'}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Passenger Lift</span>
-                  <span className="text-brand-dark font-semibold text-lg">{projectData.passengerLifts || 'N/A'}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Rooftop Gardening</span>
-                  <span className="text-brand-dark font-semibold text-lg">Yes</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Electricity Backup</span>
-                  <span className="text-brand-dark font-semibold text-lg">Yes</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Car Parking</span>
-                  <span className="text-brand-dark font-semibold text-lg">Yes</span>
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 items-start">
+                {projectData.location && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Address</span>
+                    <span className="text-brand-dark font-semibold text-lg leading-tight">{projectData.location}</span>
+                  </div>
+                )}
+                {projectData.buildingType && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Building Blueprint</span>
+                    <span className="text-brand-dark font-semibold text-sm xl:text-lg break-all">{projectData.buildingType}</span>
+                  </div>
+                )}
+                {projectData.landArea && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Land Area</span>
+                    <span className="text-brand-dark font-semibold text-lg">{projectData.landArea}</span>
+                  </div>
+                )}
+                {projectData.architect && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Architect</span>
+                    <span className="text-brand-dark font-semibold text-lg break-words whitespace-normal leading-tight">{projectData.architect}</span>
+                  </div>
+                )}
+                {projectData.totalUnits && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Total Units</span>
+                    <span className="text-brand-dark font-semibold text-lg">{projectData.totalUnits}</span>
+                  </div>
+                )}
+                {projectData.sqft && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Unit Size</span>
+                    <span className="text-brand-dark font-semibold text-lg">{projectData.sqft} SFT</span>
+                  </div>
+                )}
+                {projectData.parkingAvailable && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Parking Available</span>
+                    <span className="text-brand-dark font-semibold text-lg">{projectData.parkingAvailable}</span>
+                  </div>
+                )}
+                {projectData.unitsPerFloor && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Units Per Floor</span>
+                    <span className="text-brand-dark font-semibold text-lg">{projectData.unitsPerFloor}</span>
+                  </div>
+                )}
+                {projectData.frontRoadSize && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Front Road</span>
+                    <span className="text-brand-dark font-semibold text-lg">{projectData.frontRoadSize}</span>
+                  </div>
+                )}
+                {projectData.passengerLifts && (
+                  <div className="flex flex-col">
+                    <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Passenger Lifts</span>
+                    <span className="text-brand-dark font-semibold text-lg">{projectData.passengerLifts}</span>
+                  </div>
+                )}
               </div>
             </section>
 

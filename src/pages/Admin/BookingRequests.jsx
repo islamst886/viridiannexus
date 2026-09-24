@@ -121,6 +121,7 @@ export default function BookingRequests() {
                         <td className="p-4">
                           <div className="font-medium text-brand-dark">{r.projectName}</div>
                           <div className="text-sm text-gray-500">{r.unitType}</div>
+                          {r.parkingRequested > 0 && <div className="text-xs font-bold text-brand-primary mt-1">🚗 {r.parkingRequested} Parking Spot(s) Requested</div>}
                         </td>
                         <td className="p-4">
                           {r.status === 'Pending Review' && <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Pending</span>}

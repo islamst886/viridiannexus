@@ -82,7 +82,7 @@ export default function BookingDetail() {
         <div className="flex justify-between items-end mb-8">
           <div>
             <h1 className="text-3xl font-serif font-bold text-gray-900 mb-2">Booking #{booking.bookingRef}</h1>
-            <p className="text-gray-500 font-medium">{booking.propertyName} - {booking.unitType}</p>
+            <p className="text-gray-500 font-medium">{booking.propertyName} - {booking.unitType} {booking.parkingIncluded ? ` | 🚗 Parking: ${booking.parkingIncluded}` : (booking.parkingRequested > 0 && ` | 🚗 ${booking.parkingRequested} Parking Requested`)}</p>
           </div>
           <span className={`px-4 py-2 rounded-full text-sm font-bold ${booking.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-800'}`}>
             {booking.status}

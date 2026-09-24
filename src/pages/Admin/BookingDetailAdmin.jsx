@@ -11,6 +11,9 @@ import {
 import { toast } from 'react-toastify';
 import StageAdvanceModal from './StageAdvanceModal';
 import CancelBookingModal from './CancelBookingModal';
+import ReleaseParkingModal from './ReleaseParkingModal';
+import AddParkingModal from './AddParkingModal';
+import ChangeParkingModal from './ChangeParkingModal';
 
 const STAGES = [
   'EOI', 'Token Paid', 'Agreement Signed', 'Down Payment Paid', 
@@ -41,6 +44,9 @@ export default function AdminBookingDetail() {
   
   const [isChangeUnitModalOpen, setIsChangeUnitModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isReleaseParkingModalOpen, setIsReleaseParkingModalOpen] = useState(false);
+  const [isAddParkingModalOpen, setIsAddParkingModalOpen] = useState(false);
+  const [isChangeParkingModalOpen, setIsChangeParkingModalOpen] = useState(false);
   
   const [linkedUser, setLinkedUser] = useState(null);
   const [syncingProfile, setSyncingProfile] = useState(false);
@@ -170,6 +176,7 @@ export default function AdminBookingDetail() {
     }
   };
 
+
   const formatMoney = (amount) => {
     if (amount === undefined || amount === null) return '৳0';
     return '৳ ' + Math.round(Number(amount)).toLocaleString('en-IN');
@@ -225,6 +232,28 @@ export default function AdminBookingDetail() {
                 >
                   {booking.status === 'On Hold' ? 'Resume Booking' : 'Put on Hold'}
                 </button>
+                <button 
+                  onClick={() => setIsAddParkingModalOpen(true)}
+                  className="px-4 py-2 bg-brand-primary/10 text-brand-dark border border-brand-primary/20 rounded-lg text-sm font-semibold hover:bg-brand-primary/20 transition-colors flex items-center gap-1.5"
+                >
+                  🚗 Add Parking
+                </button>
+                {booking.parkingIncluded && (
+                  <>
+                    <button 
+                      onClick={() => setIsChangeParkingModalOpen(true)}
+                      className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1.5"
+                    >
+                      🔄 Swap Parking
+                    </button>
+                    <button 
+                      onClick={() => setIsReleaseParkingModalOpen(true)}
+                      className="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-semibold hover:bg-amber-100 transition-colors flex items-center gap-1.5"
+                    >
+                      🚗 Release Parking
+                    </button>
+                  </>
+                )}
                 <button 
                   onClick={() => setIsCancelModalOpen(true)}
                   className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors"
@@ -341,6 +370,19 @@ export default function AdminBookingDetail() {
                   <div><span className="text-gray-500 block text-xs font-bold uppercase">Location</span> <span className="font-medium text-gray-900">{booking.propertyLocation}</span></div>
                   <div><span className="text-gray-500 block text-xs font-bold uppercase">Unit Type</span> <span className="font-medium text-gray-900">{booking.unitType}</span></div>
                   <div><span className="text-gray-500 block text-xs font-bold uppercase">Unit Number</span> <span className="font-medium text-gray-900">{booking.unitNumber || 'TBD'}</span></div>
+                  {booking.parkingIncluded && (
+                    <div>
+                      <span className="text-gray-500 block text-xs font-bold uppercase">Parking Assigned</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">🚗 {booking.parkingIncluded}</span>
+                        {booking.status !== 'Cancelled' && (
+                          <button onClick={() => setIsReleaseParkingModalOpen(true)} className="text-xs font-bold text-amber-600 hover:text-amber-800 underline underline-offset-2 transition-colors">
+                            Release
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -578,7 +620,6 @@ export default function AdminBookingDetail() {
         />
       )}
 
-      {/* Cancel Booking Modal */}
       <CancelBookingModal
         isOpen={isCancelModalOpen}
         onClose={() => setIsCancelModalOpen(false)}
@@ -586,6 +627,27 @@ export default function AdminBookingDetail() {
         adminName={adminName}
         adminUid={adminUid}
         onSuccess={() => setIsCancelModalOpen(false)}
+      />
+      
+      <ReleaseParkingModal
+        isOpen={isReleaseParkingModalOpen}
+        onClose={() => setIsReleaseParkingModalOpen(false)}
+        booking={booking}
+        onComplete={() => setIsReleaseParkingModalOpen(false)}
+      />
+
+      <AddParkingModal
+        isOpen={isAddParkingModalOpen}
+        onClose={() => setIsAddParkingModalOpen(false)}
+        booking={booking}
+        onComplete={() => setIsAddParkingModalOpen(false)}
+      />
+
+      <ChangeParkingModal
+        isOpen={isChangeParkingModalOpen}
+        onClose={() => setIsChangeParkingModalOpen(false)}
+        booking={booking}
+        onComplete={() => setIsChangeParkingModalOpen(false)}
       />
     </div>
   );

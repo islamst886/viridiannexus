@@ -43,6 +43,11 @@ export default function PropertyForm() {
     sqft: '',
     buildingType: '',
     unitsPerFloor: '',
+    totalUnits: '',
+    landArea: '',
+    architect: '',
+    parkingAvailable: '',
+    parkingPrice: '',
     frontRoadSize: '',
     totalShare: '',
     landmarks: '',
@@ -52,6 +57,7 @@ export default function PropertyForm() {
     brochureUrl: '',
     availableUnits: [],
     inventory: [],
+    parkingInventory: [],
     amenities: [],
     customAmenities: [],
     images: {
@@ -108,9 +114,15 @@ export default function PropertyForm() {
           customAmenities: data.customAmenities || [],
           availableUnits: data.availableUnits || [],
           inventory: data.inventory || [],
+          parkingInventory: data.parkingInventory || [],
           propertyType: Array.isArray(data.propertyType) ? data.propertyType : (data.propertyType ? [data.propertyType] : []),
           buildingType: data.buildingType || '',
           unitsPerFloor: data.unitsPerFloor || '',
+          totalUnits: data.totalUnits || '',
+          landArea: data.landArea || '',
+          architect: data.architect || '',
+          parkingAvailable: data.parkingAvailable || '',
+          parkingPrice: data.parkingPrice || '',
           passengerLifts: data.passengerLifts || '',
           frontRoadSize: data.frontRoadSize || '',
           totalShare: data.totalShare || '',
@@ -316,6 +328,11 @@ export default function PropertyForm() {
         sqft: formData.sqft,
         buildingType: formData.buildingType,
         unitsPerFloor: formData.unitsPerFloor,
+        totalUnits: formData.totalUnits,
+        landArea: formData.landArea,
+        architect: formData.architect,
+        parkingAvailable: formData.parkingAvailable,
+        parkingPrice: formData.parkingPrice,
         passengerLifts: formData.passengerLifts,
         frontRoadSize: formData.frontRoadSize,
         totalShare: formData.totalShare,
@@ -325,6 +342,7 @@ export default function PropertyForm() {
         brochureUrl: formData.brochureUrl,
         availableUnits: formData.availableUnits,
         inventory: formData.inventory,
+        parkingInventory: formData.parkingInventory || [],
         amenities: formData.amenities,
         customAmenities: formData.customAmenities || [],
         images: formData.images
@@ -570,12 +588,32 @@ export default function PropertyForm() {
           <h3 className="text-xl font-serif text-brand-dark mb-4">Technical Specifications</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-6 rounded-xl border border-gray-200">
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Building Type</label>
-              <input type="text" name="buildingType" value={formData.buildingType} onChange={handleInputChange} placeholder="e.g. B+G+M+17" className="w-full p-3 bg-white border border-gray-200 rounded outline-none focus:border-brand-primary" />
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Building Blueprint (Floor Structure)</label>
+              <input type="text" name="buildingType" value={formData.buildingType} onChange={handleInputChange} placeholder="e.g. 4B+LG+UG+P4+M+40+MEP+20+PH+R" className="w-full p-3 bg-white border border-gray-200 rounded outline-none focus:border-brand-primary" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Land Area</label>
+              <input type="text" name="landArea" value={formData.landArea} onChange={handleInputChange} placeholder="e.g. 10 Katha" className="w-full p-3 bg-white border border-gray-200 rounded outline-none focus:border-brand-primary" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Architect</label>
+              <input type="text" name="architect" value={formData.architect} onChange={handleInputChange} placeholder="e.g. Inspace Architects Limited" className="w-full p-3 bg-white border border-gray-200 rounded outline-none focus:border-brand-primary" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Total Units in Project</label>
+              <input type="number" name="totalUnits" value={formData.totalUnits} onChange={handleInputChange} placeholder="e.g. 120" className="w-full p-3 bg-white border border-gray-200 rounded outline-none focus:border-brand-primary" />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Units Per Floor</label>
               <input type="number" name="unitsPerFloor" value={formData.unitsPerFloor} onChange={handleInputChange} placeholder="e.g. 4" className="w-full p-3 bg-white border border-gray-200 rounded outline-none focus:border-brand-primary" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Total Parking Available</label>
+              <input type="number" name="parkingAvailable" value={formData.parkingAvailable} onChange={handleInputChange} placeholder="e.g. 150" className="w-full p-3 bg-white border border-gray-200 rounded outline-none focus:border-brand-primary" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Price Per Parking (৳)</label>
+              <input type="number" name="parkingPrice" value={formData.parkingPrice} onChange={handleInputChange} placeholder="e.g. 3000000" className="w-full p-3 bg-white border border-gray-200 rounded outline-none focus:border-brand-primary" />
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Total Share</label>
@@ -778,6 +816,98 @@ export default function PropertyForm() {
               ))}
               {(!formData.inventory || formData.inventory.length === 0) && (
                 <p className="text-gray-400 text-sm italic">No specific units defined yet. You can pre-define them here so admins can select them when booking.</p>
+              )}
+            </div>
+          </div>
+
+          <hr className="border-gray-100" />
+          
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-col">
+                <h3 className="text-xl font-serif text-brand-dark">Parking Inventory</h3>
+                <p className="text-sm text-gray-500 mt-1">Define individual parking spots so they can be tracked and assigned to clients without duplication. Each spot gets a unique ID.</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    parkingInventory: [...(prev.parkingInventory || []), { 
+                      id: `PKG-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+                      label: '',
+                      level: '',
+                      zone: '',
+                      status: 'Available',
+                      assignedBookingId: null
+                    }]
+                  }));
+                  setIsDirty(true);
+                }}
+                className="bg-brand-primary text-white px-3 py-1 text-sm font-bold rounded flex items-center gap-1 hover:bg-brand-dark"
+              >
+                <Plus size={16} /> Add Parking Spot
+              </button>
+            </div>
+            <div className="space-y-3">
+              {(formData.parkingInventory || []).map((spot, idx) => (
+                <div key={spot.id} className={`flex flex-wrap md:flex-nowrap gap-3 p-4 rounded border relative ${spot.status === 'Assigned' ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      if (spot.status === 'Assigned') {
+                        alert(`Cannot delete spot "${spot.label}" — it is currently assigned to a booking (${spot.assignedBookingId}). Release it from that booking first.`);
+                        return;
+                      }
+                      if (!window.confirm("Are you sure you want to remove this parking spot?")) return;
+                      setFormData(prev => ({ ...prev, parkingInventory: prev.parkingInventory.filter((_, i) => i !== idx) }));
+                      setIsDirty(true);
+                    }} 
+                    className="absolute top-2 right-2 text-red-500 hover:text-red-700 disabled:opacity-30"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                  <div className="w-full md:w-1/5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Spot ID</label>
+                    <input type="text" value={spot.id} readOnly className="w-full p-2 border rounded bg-white/60 text-xs text-gray-500 font-mono cursor-not-allowed" />
+                  </div>
+                  <div className="w-full md:w-1/5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Spot Label *</label>
+                    <input type="text" value={spot.label} onChange={(e) => {
+                      const updated = [...(formData.parkingInventory || [])];
+                      updated[idx].label = e.target.value;
+                      setFormData(p => ({ ...p, parkingInventory: updated }));
+                      setIsDirty(true);
+                    }} placeholder="e.g. B1-Spot A3" className="w-full p-2 border rounded bg-white" />
+                  </div>
+                  <div className="w-full md:w-1/5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Level / Floor</label>
+                    <input type="text" value={spot.level} onChange={(e) => {
+                      const updated = [...(formData.parkingInventory || [])];
+                      updated[idx].level = e.target.value;
+                      setFormData(p => ({ ...p, parkingInventory: updated }));
+                      setIsDirty(true);
+                    }} placeholder="e.g. Basement 2" className="w-full p-2 border rounded bg-white" />
+                  </div>
+                  <div className="w-full md:w-1/5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Zone / Section</label>
+                    <input type="text" value={spot.zone} onChange={(e) => {
+                      const updated = [...(formData.parkingInventory || [])];
+                      updated[idx].zone = e.target.value;
+                      setFormData(p => ({ ...p, parkingInventory: updated }));
+                      setIsDirty(true);
+                    }} placeholder="e.g. Section A" className="w-full p-2 border rounded bg-white" />
+                  </div>
+                  <div className="w-full md:w-1/5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Status</label>
+                    <span className={`inline-flex items-center gap-1 px-3 py-2 rounded text-xs font-bold w-full justify-center ${spot.status === 'Assigned' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-green-100 text-green-800 border border-green-300'}`}>
+                      {spot.status === 'Assigned' ? `🔒 Assigned` : '✅ Available'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {(!formData.parkingInventory || formData.parkingInventory.length === 0) && (
+                <p className="text-gray-400 text-sm italic">No parking spots defined yet. Click "Add Parking Spot" to define individual spots that can be tracked and assigned.</p>
               )}
             </div>
           </div>

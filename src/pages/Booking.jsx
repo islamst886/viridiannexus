@@ -78,6 +78,7 @@ export default function Booking() {
     phone: userProfile?.phone || '',
     nid: '',
     address: '',
+    parkingRequested: 0,
   });
   const [errors, setErrors] = useState({});
 
@@ -143,6 +144,8 @@ export default function Booking() {
         projectId: selectedProject,
         projectName: currentProject?.name || 'N/A',
         unitType: selectedUnit,
+        parkingRequested: Number(form.parkingRequested),
+        parkingPrice: currentProject?.parkingPrice || 0,
         clientName: `${form.firstName} ${form.lastName}`,
         clientEmail: form.email,
         clientPhone: form.phone,
@@ -267,6 +270,23 @@ export default function Booking() {
                   </select>
                 </div>
 
+                {currentProject && Number(currentProject.parkingAvailable) > 0 && (
+                  <div>
+                    <label style={labelStyle}>Parking Required (Optional)</label>
+                    <select
+                      name="parkingRequested"
+                      value={form.parkingRequested}
+                      onChange={handleFormChange}
+                      style={{ ...inputStyle, appearance: 'auto' }}
+                    >
+                      <option value={0}>None</option>
+                      {[...Array(Math.min(5, Number(currentProject.parkingAvailable)))].map((_, i) => (
+                        <option key={i + 1} value={i + 1}>{i + 1} Spot{i > 0 ? 's' : ''} {currentProject.parkingPrice ? `(+ ৳${Number(currentProject.parkingPrice).toLocaleString()}/each)` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {currentProject && (
                   <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px' }}>
                     <p style={{ fontWeight: '700', color: '#166534', marginBottom: '8px', fontSize: '14px' }}>{currentProject.name}</p>
@@ -332,6 +352,7 @@ export default function Booking() {
                 {[
                   ['Property', currentProject?.name || 'N/A'],
                   ['Unit', selectedUnit],
+                  ['Parking Spots', form.parkingRequested > 0 ? `${form.parkingRequested} Spot(s)` : 'None'],
                   ['Applicant', `${form.firstName} ${form.lastName}`],
                   ['Email', form.email],
                   ['Phone', form.phone],

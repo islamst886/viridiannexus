@@ -27,6 +27,7 @@ export default function Contact() {
     inquiryType: initialInquiry,
     message: ''
   });
+  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -67,6 +68,10 @@ export default function Contact() {
       toast.error("Please fill out all fields.");
       return;
     }
+    if (!agreed) {
+      toast.error("You must agree to the Privacy Policy to submit.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -86,6 +91,7 @@ export default function Contact() {
         inquiryType: 'Domestic Investment',
         message: ''
       });
+      setAgreed(false);
     } catch (error) {
       console.error("Error submitting inquiry:", error);
       toast.error("Something went wrong. Please try again.");
@@ -195,7 +201,20 @@ export default function Contact() {
               <textarea rows="4" required value={formData.message} onChange={(e) => setFormData(p => ({...p, message: e.target.value}))} className="w-full border-b-2 border-brand-primary/20 p-2 focus:outline-none focus:border-brand-primary bg-transparent transition-colors resize-none"></textarea>
             </div>
 
-            <button type="submit" disabled={loading} className="w-full bg-brand-primary flex items-center justify-center gap-2 text-white py-4 font-bold uppercase tracking-widest hover:bg-brand-dark transition-colors mt-8 disabled:opacity-70">
+            <div className="flex items-start gap-3 mt-4">
+              <input 
+                type="checkbox" 
+                id="privacy"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-1 w-4 h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary"
+              />
+              <label htmlFor="privacy" className="text-sm text-gray-600 leading-relaxed">
+                I agree to the processing of my personal data in accordance with the <a href="/privacy" className="text-brand-primary font-bold hover:underline">Privacy Policy</a>. I understand that Viridian Nexus will use this information to contact me regarding my inquiry.
+              </label>
+            </div>
+
+            <button type="submit" disabled={loading || !agreed} className="w-full bg-brand-primary flex items-center justify-center gap-2 text-white py-4 font-bold uppercase tracking-widest hover:bg-brand-dark transition-colors mt-8 disabled:opacity-70 disabled:cursor-not-allowed">
               {loading && <Loader2 className="animate-spin" size={20} />}
               {loading ? 'Submitting...' : 'Submit Inquiry'}
             </button>
