@@ -31,6 +31,7 @@ import BookingRequests from './pages/Admin/BookingRequests';
 import PropertyForm from './pages/Admin/PropertyForm';
 import ProgressManager from './pages/Admin/ProgressManager';
 import AdminNewsletter from './pages/Admin/Newsletter';
+import AdminSiteSettings from './pages/Admin/SiteSettings';
 import UserManager from './pages/Admin/UserManager';
 
 // Route Guards
@@ -92,7 +93,8 @@ const router = createBrowserRouter([
       { path: "admin/newsletter", element: <ProtectedRoute><AdminNewsletter /></ProtectedRoute> },
       { path: "admin/property/new", element: <ProtectedRoute><PropertyForm /></ProtectedRoute> },
       { path: "admin/property/:id", element: <ProtectedRoute><PropertyForm /></ProtectedRoute> },
-      { path: "admin/users", element: <SuperAdminRoute><UserManager /></SuperAdminRoute> }
+      { path: "admin/users", element: <SuperAdminRoute><UserManager /></SuperAdminRoute> },
+      { path: "admin/settings", element: <SuperAdminRoute><AdminSiteSettings /></SuperAdminRoute> }
     ]
   }
 ]);

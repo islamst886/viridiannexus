@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Menu, X, Bell, Heart, User, ChevronDown } from 'lucide-react';
+import { Menu, X, Bell, Heart, User, ChevronDown, Facebook, Youtube, Linkedin } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../lib/utils';
 import { useGlobalState } from '../context/GlobalState';
@@ -8,12 +8,13 @@ import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'react-toastify';
 import { Loader2 } from 'lucide-react';
+import FloatingWhatsApp from './FloatingWhatsApp';
 
 export default function Layout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const location = useLocation();
-  const { isLoggedIn, isAdmin, userProfile, wishlist, notifications, markNotificationsRead } = useGlobalState();
+  const { isLoggedIn, isAdmin, userProfile, wishlist, notifications, markNotificationsRead, siteSettings } = useGlobalState();
   const { signOut } = useAuth();
   const [email, setEmail] = useState('');
   const [isSubscribing, setIsSubscribing] = useState(false);
@@ -235,6 +236,23 @@ export default function Layout() {
                 RAJUK Approval Code: RJ-VN-2024-88A<br />
                 BNBC 2020 Compliant
               </div>
+              <div className="mt-6 flex gap-4">
+                {siteSettings?.facebookUrl && (
+                  <a href={siteSettings.facebookUrl} target="_blank" rel="noopener noreferrer" className="text-brand-neutral/60 hover:text-white transition-colors">
+                    <Facebook size={20} />
+                  </a>
+                )}
+                {siteSettings?.linkedinUrl && (
+                  <a href={siteSettings.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-brand-neutral/60 hover:text-white transition-colors">
+                    <Linkedin size={20} />
+                  </a>
+                )}
+                {siteSettings?.youtubeUrl && (
+                  <a href={siteSettings.youtubeUrl} target="_blank" rel="noopener noreferrer" className="text-brand-neutral/60 hover:text-white transition-colors">
+                    <Youtube size={20} />
+                  </a>
+                )}
+              </div>
             </div>
             <div>
               <h3 className="text-xl font-serif text-brand-accent mb-4">Quick Links</h3>
@@ -274,6 +292,9 @@ export default function Layout() {
           </div>
         </footer>
       )}
+
+      {/* Floating WhatsApp Widget */}
+      {location.pathname !== '/auth' && <FloatingWhatsApp />}
     </div>
   );
 }

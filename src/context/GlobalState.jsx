@@ -17,6 +17,8 @@ export const GlobalStateProvider = ({ children }) => {
   const [loadingProperties, setLoadingProperties] = useState(true);
   const [adminUnsavedChanges, setAdminUnsavedChanges] = useState(false);
   const [bypassUnsavedGuard, setBypassUnsavedGuard] = useState(false);
+  
+  const [siteSettings, setSiteSettings] = useState(null);
 
   useEffect(() => {
     let unsubProfile = () => { };
@@ -127,6 +129,25 @@ export const GlobalStateProvider = ({ children }) => {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'site'), (snap) => {
+      if (snap.exists()) {
+        setSiteSettings(snap.data());
+      } else {
+        setSiteSettings({
+          facebookUrl: '',
+          youtubeUrl: '',
+          linkedinUrl: '',
+          whatsappNumber: ''
+        });
+      }
+    }, (error) => {
+      console.error("Failed to fetch site settings:", error);
+    });
+    
+    return () => unsubSettings();
+  }, []);
+
   const isLoggedIn = !!authUser;
   const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'super_admin';
   const isSuperAdmin = userProfile?.role === 'super_admin';
@@ -148,7 +169,8 @@ export const GlobalStateProvider = ({ children }) => {
       adminUnsavedChanges,
       setAdminUnsavedChanges,
       bypassUnsavedGuard,
-      setBypassUnsavedGuard
+      setBypassUnsavedGuard,
+      siteSettings
     }}>
       {children}
     </GlobalStateContext.Provider>

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, Home, MessageSquare, ExternalLink, CalendarCheck, Clock, Users, Mail } from 'lucide-react';
+import { LogOut, Home, MessageSquare, ExternalLink, CalendarCheck, Clock, Users, Mail, Settings } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useGlobalState } from '../context/GlobalState';
@@ -64,12 +64,20 @@ export default function AdminSidebar() {
           <Mail size={20} /> Newsletter
         </button>
         {isSuperAdmin && (
-          <button 
-            onClick={() => handleNavigation('/admin/users')}
-            className={`w-full text-left flex items-center gap-3 p-3 rounded font-bold transition-colors mt-4 bg-brand-primary/10 ${isActive('/admin/users') ? 'bg-brand-primary text-brand-neutral' : 'text-brand-primary hover:bg-brand-primary hover:text-white'}`}
-          >
-            <Users size={20} /> User Management
-          </button>
+          <div className="space-y-4 mt-4">
+            <button 
+              onClick={() => handleNavigation('/admin/users')}
+              className={`w-full text-left flex items-center gap-3 p-3 rounded font-bold transition-colors bg-brand-primary/10 ${isActive('/admin/users') ? 'bg-brand-primary text-brand-neutral' : 'text-brand-primary hover:bg-brand-primary hover:text-white'}`}
+            >
+              <Users size={20} /> User Management
+            </button>
+            <button 
+              onClick={() => handleNavigation('/admin/settings')}
+              className={`w-full text-left flex items-center gap-3 p-3 rounded font-bold transition-colors bg-brand-primary/10 ${isActive('/admin/settings') ? 'bg-brand-primary text-brand-neutral' : 'text-brand-primary hover:bg-brand-primary hover:text-white'}`}
+            >
+              <Settings size={20} /> Site Settings
+            </button>
+          </div>
         )}
         
         <div className="pt-8 mt-8 border-t border-white/10">
