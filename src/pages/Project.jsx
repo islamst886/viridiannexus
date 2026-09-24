@@ -241,7 +241,7 @@ function ProjectContent() {
                   {isSaved ? 'Saved' : 'Save Property'}
                 </button>
 
-                {projectData.brochureUrl && (
+                {projectData.brochureUrl ? (
                   <a 
                     href={projectData.brochureUrl}
                     target="_blank"
@@ -251,6 +251,14 @@ function ProjectContent() {
                     <Download size={20} />
                     Brochure
                   </a>
+                ) : (
+                  <Link 
+                    to={`/contact?property=${projectData.id}`}
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-brand-dark text-brand-accent font-bold hover:bg-black transition-colors shadow-lg"
+                  >
+                    <FileText size={20} />
+                    Request Brochure
+                  </Link>
                 )}
               </div>
             </div>
@@ -401,6 +409,35 @@ function ProjectContent() {
                     </div>
                   );
                 })()}
+              </section>
+            )}
+
+            {/* Floor Plan / Layout Section */}
+            {projectData.images?.floorPlan && (
+              <section className="mb-12">
+                <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3 flex items-center gap-2">
+                  <LayoutDashboard className="text-brand-primary" size={24} /> Project Layouts & Floor Plans
+                </h2>
+                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="relative w-full overflow-hidden rounded-xl bg-gray-50 flex justify-center p-4">
+                    <img 
+                      src={projectData.images.floorPlan} 
+                      alt="Floor Plan" 
+                      className="w-full max-w-4xl object-contain rounded-lg hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+                      onClick={() => {
+                        // Open in new tab or add to lightbox if needed. For now, simple open in new tab.
+                        window.open(projectData.images.floorPlan, '_blank');
+                      }}
+                    />
+                    <div className="absolute bottom-4 right-4 bg-brand-dark/80 text-white text-xs px-3 py-2 rounded-full backdrop-blur-sm shadow-md pointer-events-none flex items-center gap-2">
+                      <Maximize size={14} /> Click to expand
+                    </div>
+                  </div>
+                  <div className="mt-6 flex gap-4 text-sm text-gray-500 justify-center">
+                    <div className="flex items-center gap-1"><CheckCircle size={16} className="text-brand-primary" /> Intelligently Designed Spaces</div>
+                    <div className="flex items-center gap-1"><CheckCircle size={16} className="text-brand-primary" /> Maximum Natural Light & Ventilation</div>
+                  </div>
+                </div>
               </section>
             )}
 

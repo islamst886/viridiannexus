@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MapPin, Phone, Mail, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapPin, Phone, Mail, Loader2, ChevronDown } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'react-toastify';
@@ -10,14 +10,44 @@ export default function Contact() {
   const { isLoggedIn, userProfile } = useGlobalState();
   const location = useLocation();
 
+  const searchParams = new URLSearchParams(location.search);
+  const propertyParam = searchParams.get('property');
+
+  const formatPropertyName = (id) => {
+    if (!id) return '';
+    return id.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
+  const initialInquiry = propertyParam ? 'Brochure Request' : 'Domestic Investment';
+
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
-    inquiryType: 'Domestic Investment',
+    inquiryType: initialInquiry,
     message: ''
   });
   const [loading, setLoading] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const inquiryOptions = [
+    'Domestic Investment',
+    'NRB / International Purchase',
+    'Brochure Request',
+    'Virtual Tour Request',
+    'Private Consultation'
+  ];
 
   React.useEffect(() => {
     if (isLoggedIn && userProfile) {
@@ -131,13 +161,32 @@ export default function Contact() {
               <input type="email" required value={formData.email} onChange={(e) => setFormData(p => ({...p, email: e.target.value}))} readOnly={isLoggedIn} className={`w-full border-b-2 border-brand-primary/20 p-2 focus:outline-none focus:border-brand-primary bg-transparent transition-colors ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} />
             </div>
 
-            <div>
+            <div className="relative" ref={dropdownRef}>
               <label className="block text-sm font-bold text-brand-dark mb-2 uppercase tracking-wider">Inquiry Type</label>
-              <select value={formData.inquiryType} onChange={(e) => setFormData(p => ({...p, inquiryType: e.target.value}))} className="w-full border-b-2 border-brand-primary/20 p-2 focus:outline-none focus:border-brand-primary bg-transparent transition-colors">
-                <option>Domestic Investment</option>
-                <option>NRB / International Purchase</option>
-                <option>Virtual Tour Request</option>
-              </select>
+              <div 
+                className="w-full border-b-2 border-brand-primary/20 p-2 flex justify-between items-center cursor-pointer hover:border-brand-primary transition-colors"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              >
+                <span className="text-brand-dark font-medium">{formData.inquiryType}</span>
+                <ChevronDown size={18} className={`text-brand-primary transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              </div>
+              
+              {isDropdownOpen && (
+                <div className="absolute z-10 w-full mt-2 bg-white border border-gray-100 shadow-2xl rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+                  {inquiryOptions.map((option) => (
+                    <div 
+                      key={option}
+                      className={`p-4 cursor-pointer text-sm transition-colors border-b border-gray-50 last:border-0 ${formData.inquiryType === option ? 'bg-brand-primary/10 text-brand-primary font-bold' : 'text-brand-dark hover:bg-brand-primary/5 hover:text-brand-primary'}`}
+                      onClick={() => {
+                        setFormData(p => ({...p, inquiryType: option}));
+                        setIsDropdownOpen(false);
+                      }}
+                    >
+                      {option}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>

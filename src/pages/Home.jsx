@@ -118,7 +118,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1 }}
-            className="text-4xl md:text-6xl lg:text-7xl font-serif text-brand-neutral mb-6"
+            className="text-4xl md:text-6xl lg:text-7xl font-serif text-brand-neutral mb-6 drop-shadow-lg"
           >
             Discover Your Premium <br/><span className="text-brand-accent text-5xl md:text-7xl">Luxury Residence</span>
           </motion.h1>
@@ -126,9 +126,9 @@ export default function Home() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1, delay: 0.2 }}
-            className="text-lg md:text-xl text-brand-neutral/80 mb-12 max-w-3xl mx-auto"
+            className="text-lg md:text-xl text-brand-neutral/90 mb-12 max-w-3xl mx-auto drop-shadow"
           >
-            Exclusive estates in Jolshiri Abashon and beyond. Exceptional design, military-grade security, and uncompromising luxury.
+            Curating exclusive real estate portfolios across Dhaka's most prestigious neighborhoods. Exceptional design, elite security, and uncompromising luxury.
           </motion.p>
         </div>
       </section>
@@ -195,32 +195,38 @@ export default function Home() {
                 const specs = formatPropertySpecs(project);
                 const priceStr = formatPropertyPrice(project);
                 return (
-                  <div key={project.id} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow overflow-hidden group border border-gray-100">
+                  <div key={project.id} onClick={() => navigate(`/property/${project.id}`)} className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all overflow-hidden group border border-gray-100 cursor-pointer transform hover:-translate-y-1 duration-300">
                     <div className="relative h-64 overflow-hidden">
                       <img src={project.images?.hero || 'https://via.placeholder.com/800x600'} alt={project.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                      <div className="absolute top-4 left-4 bg-brand-dark text-brand-accent text-xs font-bold px-3 py-1 uppercase tracking-wider rounded-sm">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      <div className="absolute top-4 left-4 bg-brand-dark/90 text-brand-accent text-xs font-bold px-3 py-1 uppercase tracking-wider rounded-sm backdrop-blur-sm shadow-md">
                         {project.status}
                       </div>
                       <button 
-                        onClick={() => toggleWishlist(project)}
-                        className={`absolute top-4 right-4 p-2 rounded-full shadow-md transition-colors ${isSaved ? 'bg-brand-primary text-white' : 'bg-white text-gray-400 hover:text-brand-primary'}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleWishlist(project);
+                        }}
+                        className={`absolute top-4 right-4 p-2 rounded-full shadow-lg backdrop-blur-sm transition-all hover:scale-110 ${isSaved ? 'bg-brand-primary text-white' : 'bg-white/80 text-gray-500 hover:text-brand-primary'}`}
                       >
                         <Heart size={20} className={isSaved ? "fill-current" : ""} />
                       </button>
                     </div>
-                    <div className="p-6">
-                      <h4 className="text-2xl font-serif text-brand-dark mb-2">{project.name}</h4>
+                    <div className="p-6 relative">
+                      <h4 className="text-2xl font-serif text-brand-dark mb-2 group-hover:text-brand-primary transition-colors">{project.name}</h4>
                       <p className="text-brand-text/70 flex items-center gap-1 text-sm mb-4"><MapPin size={16} /> {project.location}</p>
                       
                       <div className="flex justify-between items-center border-t border-b border-gray-100 py-3 mb-4 text-brand-dark/80 text-sm font-medium">
-                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/bed.png" className="w-5 h-5" alt="bed"/> {specs.beds} Beds</div>
-                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/shower.png" className="w-5 h-5" alt="bath"/> {specs.baths} Baths</div>
-                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/ruler.png" className="w-5 h-5" alt="sqft"/> {specs.sqft} SqFt</div>
+                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/bed.png" className="w-5 h-5 opacity-70" alt="bed"/> {specs.beds} Beds</div>
+                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/shower.png" className="w-5 h-5 opacity-70" alt="bath"/> {specs.baths} Baths</div>
+                        <div className="flex items-center gap-1"><img src="https://img.icons8.com/ios/50/003329/ruler.png" className="w-5 h-5 opacity-70" alt="sqft"/> {specs.sqft} SqFt</div>
                       </div>
                       
-                      <div className="flex justify-between items-center">
-                        <div className="text-xl font-bold text-brand-primary">{priceStr}</div>
-                        <Link to={`/property/${project.id}`} className="text-brand-dark font-bold hover:text-brand-primary text-sm uppercase tracking-wide">Details →</Link>
+                      <div className="flex justify-between items-center mt-2">
+                        <div className="text-xl font-bold text-brand-primary tracking-tight">{priceStr}</div>
+                        <div className="text-brand-dark font-bold group-hover:text-brand-primary text-sm uppercase tracking-wide flex items-center gap-1 transition-colors">
+                          Explore <ArrowRight size={16} className="transform group-hover:translate-x-1 transition-transform" />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -269,33 +275,38 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 5. The Paradigm of Jolshiri (Expertise) */}
+      {/* 5. Our Signature Experience */}
       <section className="py-24 bg-brand-neutral text-brand-text">
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="text-center mb-16">
-            <h2 className="text-sm font-bold text-brand-primary uppercase tracking-widest mb-2">Why Choose Us</h2>
-            <h3 className="text-4xl md:text-5xl font-serif text-brand-dark mb-6">The Paradigm of Jolshiri</h3>
-            <p className="text-lg max-w-3xl mx-auto">
-              A 2,133-acre smart city backed by the Bangladesh Army, featuring an extraordinary 48% green space ratio. Welcome to the future of urban ecology.
+            <h2 className="text-sm font-bold text-brand-primary uppercase tracking-widest mb-2 flex items-center justify-center gap-2">
+              <span className="w-8 h-[1px] bg-brand-primary"></span>
+              Our Signature Experience
+              <span className="w-8 h-[1px] bg-brand-primary"></span>
+            </h2>
+            <h3 className="text-4xl md:text-5xl font-serif text-brand-dark mb-6">Uncompromising Luxury & Integrity</h3>
+            <p className="text-lg max-w-3xl mx-auto text-brand-text/80 leading-relaxed">
+              From the highly secure enclaves of Jolshiri Abashon to the most sought-after neighborhoods across Dhaka, we deliver architectural masterpieces backed by flawless execution and visionary design.
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-16">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 mb-16">
             {[
-              { icon: ShieldCheck, title: "Multi-Tier Military Security", desc: "Uncompromised safety protocols integrated directly into the city's infrastructure." },
-              { icon: Building, title: "Integrated Underground Utilities", desc: "No overhead cables. Subterranean routing of power, water, and ultra-fast ICT networks." },
-              { icon: MapPin, title: "Unmatched Urban Connectivity", desc: "Merely 7 kilometers from the Kuril Flyover via the 300-feet RAJUK Purbachal Link Road." }
+              { icon: ShieldCheck, title: "Unrivaled Security Protocols", desc: "Elite, multi-tier security infrastructure ensuring absolute peace of mind for you and your family." },
+              { icon: Building, title: "Architectural Excellence", desc: "Collaborating with renowned global and local architects to build sustainable, intelligent, and deeply aesthetic residences." },
+              { icon: MapPin, title: "Prime Global Standards", desc: "Strategically positioned in Dhaka's most prestigious locations, offering unparalleled connectivity and lifestyle amenities." }
             ].map((feature, idx) => (
               <motion.div 
                 key={idx}
                 whileHover={{ y: -10 }}
-                className="bg-white p-8 border border-brand-primary/10 shadow-sm hover:shadow-xl transition-all duration-300 text-center rounded-xl"
+                className="bg-white p-10 border border-brand-primary/10 shadow-lg hover:shadow-2xl transition-all duration-300 text-center rounded-2xl relative overflow-hidden group"
               >
-                <div className="w-16 h-16 mx-auto bg-brand-primary/10 rounded-full flex items-center justify-center mb-6 text-brand-primary">
-                  <feature.icon size={32} />
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-primary to-brand-accent transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left"></div>
+                <div className="w-20 h-20 mx-auto bg-brand-neutral rounded-full flex items-center justify-center mb-6 text-brand-primary shadow-inner border border-gray-100">
+                  <feature.icon size={36} className="group-hover:scale-110 transition-transform" />
                 </div>
-                <h3 className="text-xl font-serif text-brand-dark mb-4">{feature.title}</h3>
-                <p className="text-sm text-brand-text/80">{feature.desc}</p>
+                <h3 className="text-2xl font-serif text-brand-dark mb-4">{feature.title}</h3>
+                <p className="text-sm text-brand-text/70 leading-relaxed">{feature.desc}</p>
               </motion.div>
             ))}
           </div>
@@ -323,25 +334,34 @@ export default function Home() {
       </section>
 
       {/* 6. Testimonials */}
-      <section className="py-24 bg-gray-50 border-t border-gray-200">
-        <div className="container mx-auto px-4 max-w-6xl text-center">
-          <Quote size={48} className="mx-auto text-brand-primary/20 mb-6" />
-          <h2 className="text-4xl font-serif text-brand-dark mb-12">What Our Residents Say</h2>
+      <section className="py-24 bg-brand-dark relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-brand-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-brand-accent/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3"></div>
+        
+        <div className="container mx-auto px-4 max-w-7xl text-center relative z-10">
+          <Quote size={56} className="mx-auto text-brand-accent/40 mb-6" />
+          <h2 className="text-sm font-bold text-brand-accent uppercase tracking-widest mb-2">Client Experiences</h2>
+          <h3 className="text-4xl md:text-5xl font-serif text-white mb-16">What Our Residents Say</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
-              { name: "Rafiqul Islam", role: "Business Executive", text: "Viridian Nexus delivers exactly what they promise. The security and the smart home features in Jolshiri are unmatched in Bangladesh." },
-              { name: "Dr. Samina Chowdhury", role: "Medical Professional", text: "The booking process was entirely transparent. Watching the construction live on the dashboard gave me complete peace of mind." },
-              { name: "Ahsan Habib", role: "NRB Investor", text: "As an expat, their NRB portal and digital wallet made property management seamless. Highly recommend the Sapphire Penthouse." }
+              { name: "Rafiqul Islam", role: "Business Executive", text: "The level of craftsmanship is extraordinary. Every detail of our penthouse was meticulously executed, and the after-sales concierge service is something I've never experienced in Bangladesh before." },
+              { name: "Dr. Samina Chowdhury", role: "Medical Professional", text: "Investing with Viridian Nexus felt less like buying property and more like acquiring a piece of art. The transparency during construction and the final handover was remarkably professional." },
+              { name: "Ahsan Habib", role: "NRB Investor", text: "Living in a Viridian Nexus property redefines luxury. The smart home integration, the serene community, and the sheer elegance of the architecture make coming home the best part of my day." }
             ].map((review, i) => (
-              <div key={i} className="bg-white p-8 rounded-xl shadow border border-gray-100 text-left">
-                <div className="flex text-yellow-400 mb-4">
-                  {[...Array(5)].map((_, i) => <Star key={i} size={16} fill="currentColor" />)}
+              <div key={i} className="bg-white/5 backdrop-blur-md p-10 rounded-2xl border border-white/10 text-left hover:bg-white/10 transition-colors duration-300">
+                <div className="flex text-brand-accent mb-6">
+                  {[...Array(5)].map((_, i) => <Star key={i} size={18} fill="currentColor" />)}
                 </div>
-                <p className="text-brand-text/80 mb-6 italic">"{review.text}"</p>
-                <div>
-                  <h4 className="font-bold text-brand-dark">{review.name}</h4>
-                  <p className="text-xs text-brand-primary uppercase tracking-wider">{review.role}</p>
+                <p className="text-white/80 mb-8 italic text-lg leading-relaxed">"{review.text}"</p>
+                <div className="flex items-center gap-4 border-t border-white/10 pt-6">
+                  <div className="w-12 h-12 rounded-full bg-brand-primary flex items-center justify-center text-brand-accent font-bold text-xl font-serif border border-white/20">
+                    {review.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-lg">{review.name}</h4>
+                    <p className="text-xs text-brand-accent uppercase tracking-widest mt-1">{review.role}</p>
+                  </div>
                 </div>
               </div>
             ))}
@@ -350,14 +370,14 @@ export default function Home() {
       </section>
 
       {/* 7. Final Call to Action */}
-      <section className="py-24 bg-brand-primary text-white text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1920&q=80')] bg-cover bg-center opacity-10"></div>
-        <div className="relative z-10 max-w-3xl mx-auto px-4">
-          <h2 className="text-4xl md:text-5xl font-serif text-brand-accent mb-6">Ready to Secure Your Legacy?</h2>
-          <p className="text-xl mb-10 text-brand-neutral/90">Join the exclusive community of Jolshiri Abashon. Book a consultation or reserve your unit online today.</p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <Link to="/contact" className="bg-brand-accent text-brand-dark px-8 py-4 font-bold rounded shadow-lg hover:bg-white transition-colors">Contact Sales Team</Link>
-              <Link to="/projects" className="bg-transparent border border-brand-accent text-brand-accent px-8 py-4 font-bold rounded hover:bg-brand-accent hover:text-brand-dark transition-colors">Browse Properties</Link>
+      <section className="py-28 bg-brand-primary text-white text-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1920&q=80')] bg-cover bg-center opacity-15 mix-blend-overlay"></div>
+        <div className="relative z-10 max-w-4xl mx-auto px-4">
+          <h2 className="text-4xl md:text-6xl font-serif text-brand-accent mb-6 drop-shadow-md">Ready to Secure Your Legacy?</h2>
+          <p className="text-xl md:text-2xl mb-12 text-white/90 font-light leading-relaxed">Discover the definitive standard of luxury living. Connect with our private advisors today to explore exclusive opportunities.</p>
+          <div className="flex flex-col sm:flex-row justify-center gap-6">
+              <Link to="/contact" className="bg-brand-accent text-brand-dark px-10 py-5 font-bold rounded-sm shadow-xl hover:bg-white hover:scale-105 transition-all uppercase tracking-widest text-sm">Contact Private Sales</Link>
+              <Link to="/projects" className="bg-transparent border-2 border-brand-accent text-brand-accent px-10 py-5 font-bold rounded-sm hover:bg-brand-accent hover:text-brand-dark transition-all uppercase tracking-widest text-sm">Explore Portfolio</Link>
             </div>
         </div>
       </section>

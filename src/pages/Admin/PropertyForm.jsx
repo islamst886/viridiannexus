@@ -57,6 +57,7 @@ export default function PropertyForm() {
     images: {
       hero: '',
       map: '',
+      floorPlan: '',
       video: '',
       gallery: []
     }
@@ -121,6 +122,7 @@ export default function PropertyForm() {
           images: {
             hero: data.images?.hero || '',
             map: data.images?.map || '',
+            floorPlan: data.images?.floorPlan || '',
             video: data.images?.video || '',
             gallery: data.images?.gallery || [],
           }
@@ -1001,6 +1003,57 @@ export default function PropertyForm() {
               </div>
               
               {formData.images.map && !formData.images.map.includes('drive.google.com') && (
+                <div className="mt-2">
+                  <p className="text-xs text-green-600 mb-1 font-bold">✓ Image Uploaded Successfully</p>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-brand-primary uppercase tracking-wider mb-2">Floor Plan / Layout</label>
+              
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-gray-50 hover:bg-gray-100 transition-colors relative">
+                <div className="space-y-1 text-center">
+                  {formData.images.floorPlan ? (
+                    <div className="flex flex-col items-center">
+                      <img src={formData.images.floorPlan} alt="Floor Plan Preview" className="h-32 object-contain rounded-md mb-2 shadow-sm bg-white p-2" />
+                      <button type="button" onClick={() => {
+                        if (window.confirm("Are you sure you want to remove this floor plan image?")) {
+                          if (formData.images.floorPlan?.includes('cloudinary.com')) setMediaToDelete(prev => [...prev, formData.images.floorPlan]);
+                          setFormData(p => ({...p, images: {...p.images, floorPlan: ''}}));
+                          setIsDirty(true);
+                        }
+                      }} className="text-xs text-red-500 hover:text-red-700 font-bold">Remove Image</button>
+                    </div>
+                  ) : uploadingImage === 'floorPlan' ? (
+                    <div className="flex flex-col items-center py-4">
+                      <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin mb-2"></div>
+                      <p className="text-sm text-brand-primary font-bold">Uploading...</p>
+                    </div>
+                  ) : (
+                    <>
+                      <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <div className="flex text-sm text-gray-600 justify-center">
+                        <label className="relative cursor-pointer bg-white rounded-md font-medium text-brand-primary hover:text-brand-dark focus-within:outline-none px-2 py-1">
+                          <span>Upload a file</span>
+                          <input type="file" className="sr-only" accept="image/*" disabled={uploadingImage !== null} onChange={(e) => handleFileUpload(e, 'floorPlan')} />
+                        </label>
+                        <p className="pl-1 pt-1">or drag and drop</p>
+                      </div>
+                      <p className="text-xs text-gray-500">PNG, JPG, WEBP up to 10MB</p>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              <div className="mt-4">
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Or Paste Image URL Manually</label>
+                <input type="url" name="floorPlan" value={formData.images.floorPlan || ''} onChange={handleImageChange} placeholder="https://..." className="w-full p-2 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary text-sm" />
+              </div>
+              
+              {formData.images.floorPlan && !formData.images.floorPlan.includes('drive.google.com') && (
                 <div className="mt-2">
                   <p className="text-xs text-green-600 mb-1 font-bold">✓ Image Uploaded Successfully</p>
                 </div>
