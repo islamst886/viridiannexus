@@ -1149,17 +1149,13 @@ function ChangeUnitModal({ booking, adminName, adminUid, onClose }) {
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">Select New Property</label>
-              <select 
-                value={selectedPropertyId} 
-                onChange={(e) => { setSelectedPropertyId(e.target.value); setSelectedInventoryId(''); }}
-                className="w-full p-3 border rounded-lg"
-              >
-                <option value="">-- Choose Property --</option>
-                {properties.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Property</label>
+              <input 
+                type="text" 
+                value={booking.propertyName}
+                className="w-full p-3 border rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
+                disabled
+              />
             </div>
 
             <div>
