@@ -27,7 +27,7 @@ export default function Layout() {
       toast.error("Please enter a valid email address.");
       return;
     }
-    
+
     setIsSubscribing(true);
     try {
       await addDoc(collection(db, 'newsletter_subscribers'), {
@@ -35,8 +35,8 @@ export default function Layout() {
         subscribedAt: serverTimestamp(),
         status: 'active'
       });
-      
-      toast.success("Welcome to Viridian Nexus Exclusive Updates.");
+
+      toast.success("Welcome to Viridian Nexus Development Ltd. Exclusive Updates.");
       setEmail('');
     } catch (error) {
       console.error(error);
@@ -63,12 +63,17 @@ export default function Layout() {
           <div className="flex justify-between items-center h-20">
             {/* Brand Logo */}
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-brand-primary rounded-sm flex items-center justify-center border border-brand-accent/50">
-                <span className="text-brand-accent font-serif font-bold text-xl">V</span>
+              <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                <img src="/logo.png" alt="Viridian Nexus Logo" className="w-full h-full object-contain drop-shadow-md" />
               </div>
-              <span className="font-serif text-2xl font-bold text-brand-neutral tracking-wide hidden sm:block">
-                Viridian<span className="text-brand-accent">Nexus</span>
-              </span>
+              <div className="hidden sm:flex flex-col justify-center">
+                <span className="font-serif text-2xl font-bold text-brand-neutral tracking-wide leading-none">
+                  Viridian<span className="text-brand-accent">Nexus</span>
+                </span>
+                <span className="text-brand-accent text-[9px] uppercase tracking-[0.25em] font-bold mt-1">
+                  Development Ltd.
+                </span>
+              </div>
             </Link>
 
             {/* Desktop Nav */}
@@ -116,7 +121,7 @@ export default function Layout() {
 
                   {/* Notifications */}
                   <div className="relative">
-                    <button 
+                    <button
                       onClick={markNotificationsRead}
                       className="relative text-brand-neutral hover:text-brand-accent transition-colors"
                     >
@@ -131,7 +136,7 @@ export default function Layout() {
 
                   {/* User Profile Dropdown */}
                   <div className="relative hidden md:block">
-                    <button 
+                    <button
                       onClick={() => setIsProfileOpen(!isProfileOpen)}
                       className="flex items-center space-x-2 text-brand-neutral hover:text-brand-accent focus:outline-none"
                     >
@@ -148,24 +153,24 @@ export default function Layout() {
 
                     {isProfileOpen && (
                       <>
-                        <div 
-                          className="fixed inset-0 z-40" 
+                        <div
+                          className="fixed inset-0 z-40"
                           onClick={() => setIsProfileOpen(false)}
                         ></div>
                         <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50">
-                        {isAdmin ? (
-                          <>
-                            <Link to="/admin/dashboard" onClick={() => setIsProfileOpen(false)} className="block px-4 py-2 text-sm font-bold text-brand-primary hover:bg-gray-100">Admin Portal</Link>
-                          </>
-                        ) : (
-                          <>
-                            <Link to="/dashboard" onClick={() => setIsProfileOpen(false)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">My Dashboard</Link>
-                            <Link to="/dashboard/wishlist" onClick={() => setIsProfileOpen(false)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Wishlist</Link>
-                          </>
-                        )}
-                        <div className="border-t border-gray-100 mt-1 pt-1">
-                          <button onClick={() => { setIsProfileOpen(false); signOut(); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 font-semibold">Sign out</button>
-                        </div>
+                          {isAdmin ? (
+                            <>
+                              <Link to="/admin/dashboard" onClick={() => setIsProfileOpen(false)} className="block px-4 py-2 text-sm font-bold text-brand-primary hover:bg-gray-100">Admin Portal</Link>
+                            </>
+                          ) : (
+                            <>
+                              <Link to="/dashboard" onClick={() => setIsProfileOpen(false)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">My Dashboard</Link>
+                              <Link to="/dashboard/wishlist" onClick={() => setIsProfileOpen(false)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Wishlist</Link>
+                            </>
+                          )}
+                          <div className="border-t border-gray-100 mt-1 pt-1">
+                            <button onClick={() => { setIsProfileOpen(false); signOut(); }} className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 font-semibold">Sign out</button>
+                          </div>
                         </div>
                       </>
                     )}
@@ -228,9 +233,17 @@ export default function Layout() {
         <footer className="bg-brand-dark text-brand-neutral py-12 border-t border-brand-primary/30 mt-auto">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
-              <h3 className="text-xl font-serif text-brand-accent mb-4">Viridian Nexus</h3>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 flex items-center justify-center flex-shrink-0">
+                  <img src="/logo.png" alt="Viridian Nexus Logo" className="w-full h-full object-contain drop-shadow-sm" />
+                </div>
+                <h3 className="text-xl font-serif text-brand-accent">Viridian Nexus Development Ltd.</h3>
+              </div>
+              <p className="text-sm text-brand-neutral/80 leading-relaxed italic mb-2">
+                "Homes Woven in Nature"
+              </p>
               <p className="text-sm text-brand-neutral/80 leading-relaxed">
-                Redefining Elite Living across Bangladesh. Crafting architectural masterpieces where natural ecology seamlessly meets modern luxury.
+                Crafting architectural masterpieces where natural ecology seamlessly meets modern luxury.
               </p>
               <div className="mt-4 text-xs text-brand-neutral/60">
                 RAJUK Approval Code: RJ-VN-2024-88A<br />
@@ -240,21 +253,21 @@ export default function Layout() {
                 {siteSettings?.facebookUrl && (
                   <a href={siteSettings.facebookUrl} target="_blank" rel="noopener noreferrer" className="text-brand-neutral/60 hover:text-white transition-colors" aria-label="Facebook">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                      <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z"/>
+                      <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" />
                     </svg>
                   </a>
                 )}
                 {siteSettings?.linkedinUrl && (
                   <a href={siteSettings.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-brand-neutral/60 hover:text-white transition-colors" aria-label="LinkedIn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
                     </svg>
                   </a>
                 )}
                 {siteSettings?.youtubeUrl && (
                   <a href={siteSettings.youtubeUrl} target="_blank" rel="noopener noreferrer" className="text-brand-neutral/60 hover:text-white transition-colors" aria-label="YouTube">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.377.55a3.016 3.016 0 0 0-2.122 2.136C0 8.07 0 12 0 12s0 3.93.498 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.55 9.377.55 9.377.55s7.505 0 9.377-.55a3.016 3.016 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.377.55a3.016 3.016 0 0 0-2.122 2.136C0 8.07 0 12 0 12s0 3.93.498 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.55 9.377.55 9.377.55s7.505 0 9.377-.55a3.016 3.016 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                     </svg>
                   </a>
                 )}
@@ -275,16 +288,16 @@ export default function Layout() {
               <h3 className="text-xl font-serif text-brand-accent mb-4">Exclusive Newsletter</h3>
               <p className="text-sm text-brand-neutral/80 mb-4">For High-Net-Worth Individuals. Receive structural updates and investment insights.</p>
               <form className="flex" onSubmit={handleSubscribe}>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isSubscribing}
-                  placeholder="Your email address" 
+                  placeholder="Your email address"
                   className="bg-brand-neutral/10 border border-brand-primary/30 text-white px-4 py-2 w-full focus:outline-none focus:border-brand-accent disabled:opacity-50"
                 />
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isSubscribing}
                   className="bg-brand-primary text-white px-4 py-2 hover:bg-brand-primary/80 transition-colors disabled:opacity-50 flex items-center justify-center min-w-[100px]"
                 >
@@ -294,7 +307,7 @@ export default function Layout() {
             </div>
           </div>
           <div className="container mx-auto px-4 mt-8 pt-8 border-t border-brand-primary/20 text-center text-xs text-brand-neutral/50">
-            &copy; {new Date().getFullYear()} Viridian Nexus. All Rights Reserved. Adheres to Real Estate Development and Management Act 2010.
+            &copy; {new Date().getFullYear()} Viridian Nexus Development Ltd. All Rights Reserved. Adheres to Real Estate Development and Management Act 2010.
           </div>
         </footer>
       )}

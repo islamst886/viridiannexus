@@ -109,7 +109,7 @@ export default function AuthPage() {
         <div className="absolute bottom-12 left-12 right-12 text-white">
           <h1 className="text-4xl font-serif font-bold leading-tight mb-4 text-brand-neutral">
             {isLogin
-              ? "Welcome Back to Viridian Nexus."
+              ? "Welcome Back to Viridian Nexus Development Ltd."
               : "Redefining Elite Living across Bangladesh."}
           </h1>
           <p className="text-lg text-brand-neutral/80 max-w-lg mb-6">
@@ -139,7 +139,7 @@ export default function AuthPage() {
             <p className="text-sm text-gray-500 leading-relaxed">
               {isLogin
                 ? 'Access your encrypted portfolio, track property progress, and manage your real estate investments with industry-leading security.'
-                : 'Join Viridian Nexus. Your data is encrypted and stored with bank-grade security standards. Experience real estate management redefined.'}
+                : 'Join Viridian Nexus Development Ltd. Your data is encrypted and stored with bank-grade security standards. Experience real estate management redefined.'}
             </p>
           </div>
 

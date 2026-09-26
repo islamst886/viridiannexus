@@ -6,7 +6,7 @@ export default function VirtualTour() {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl md:text-5xl font-bold font-serif text-brand-dark mb-6 text-center">Immersive Virtual Tour</h1>
         <p className="text-lg text-brand-text/80 text-center max-w-3xl mx-auto mb-12">
-          Experience Viridian Nexus properties from the comfort of your home with our high-definition 360-degree virtual tours.
+          Experience Viridian Nexus Development Ltd. properties from the comfort of your home with our high-definition 360-degree virtual tours.
         </p>
 
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden aspect-video relative border-4 border-gray-100">

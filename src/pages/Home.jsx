@@ -114,10 +114,20 @@ export default function Home() {
         </div>
 
         <div className="relative z-10 text-center px-4 max-w-5xl mx-auto w-full">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1, delay: 0.1 }}
+            className="mb-4"
+          >
+            <span className="text-brand-accent uppercase tracking-[0.3em] font-bold text-sm md:text-base drop-shadow-md">
+              Homes Woven In Nature
+            </span>
+          </motion.div>
           <motion.h1 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1 }}
+            transition={{ duration: 1, delay: 0.2 }}
             className="text-4xl md:text-6xl lg:text-7xl font-serif text-brand-neutral mb-6 drop-shadow-lg"
           >
             Discover Your Premium <br/><span className="text-brand-accent text-5xl md:text-7xl">Luxury Residence</span>
@@ -125,7 +135,7 @@ export default function Home() {
           <motion.p
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, delay: 0.2 }}
+            transition={{ duration: 1, delay: 0.3 }}
             className="text-lg md:text-xl text-brand-neutral/90 mb-12 max-w-3xl mx-auto drop-shadow"
           >
             Curating exclusive real estate portfolios across Dhaka's most prestigious neighborhoods. Exceptional design, elite security, and uncompromising luxury.
@@ -346,8 +356,8 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
               { name: "Rafiqul Islam", role: "Business Executive", text: "The level of craftsmanship is extraordinary. Every detail of our penthouse was meticulously executed, and the after-sales concierge service is something I've never experienced in Bangladesh before." },
-              { name: "Dr. Samina Chowdhury", role: "Medical Professional", text: "Investing with Viridian Nexus felt less like buying property and more like acquiring a piece of art. The transparency during construction and the final handover was remarkably professional." },
-              { name: "Ahsan Habib", role: "NRB Investor", text: "Living in a Viridian Nexus property redefines luxury. The smart home integration, the serene community, and the sheer elegance of the architecture make coming home the best part of my day." }
+              { name: "Dr. Samina Chowdhury", role: "Medical Professional", text: "Investing with Viridian Nexus Development Ltd. felt less like buying property and more like acquiring a piece of art. The transparency during construction and the final handover was remarkably professional." },
+              { name: "Ahsan Habib", role: "NRB Investor", text: "Living in a Viridian Nexus Development Ltd. property redefines luxury. The smart home integration, the serene community, and the sheer elegance of the architecture make coming home the best part of my day." }
             ].map((review, i) => (
               <div key={i} className="bg-white/5 backdrop-blur-md p-10 rounded-2xl border border-white/10 text-left hover:bg-white/10 transition-colors duration-300">
                 <div className="flex text-brand-accent mb-6">

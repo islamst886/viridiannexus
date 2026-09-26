@@ -106,7 +106,7 @@ export default function Contact() {
         <div className="bg-brand-dark text-brand-neutral p-12 lg:p-24 flex flex-col justify-center">
           <h1 className="text-4xl md:text-5xl font-serif text-brand-accent mb-6">Corporate Profile</h1>
           <p className="text-lg opacity-90 mb-12 leading-relaxed">
-            Viridian Nexus was founded on a singular vision: to elevate Bangladesh's real estate sector to uncompromising global standards. We are not standard contractors; we are visionary developers committed to architectural mastery and structural integrity.
+            Viridian Nexus Development Ltd. was founded on a singular vision: to elevate Bangladesh's real estate sector to uncompromising global standards. We are not standard contractors; we are visionary developers committed to architectural mastery and structural integrity.
           </p>
 
           <div className="space-y-8">
@@ -114,7 +114,7 @@ export default function Contact() {
               <MapPin className="text-brand-accent shrink-0 mt-1" />
               <div>
                 <h4 className="font-bold text-brand-accent">Corporate Office</h4>
-                <p className="opacity-80">Level 8, Nexus Tower, Gulshan Avenue<br/>Dhaka 1212, Bangladesh</p>
+                <p className="opacity-80">House # 85, Road # 07, Sector # 04<br/>Uttara, Dhaka-1230.</p>
               </div>
             </div>
             
@@ -122,7 +122,7 @@ export default function Contact() {
               <Phone className="text-brand-accent shrink-0 mt-1" />
               <div>
                 <h4 className="font-bold text-brand-accent">Direct Lines</h4>
-                <p className="opacity-80">Domestic: +880 96 0000 0000<br/>International: +1 (800) 123-4567</p>
+                <p className="opacity-80">+8802-58953042<br/>01577740874</p>
               </div>
             </div>
 
@@ -130,7 +130,7 @@ export default function Contact() {
               <Mail className="text-brand-accent shrink-0 mt-1" />
               <div>
                 <h4 className="font-bold text-brand-accent">Electronic Mail</h4>
-                <p className="opacity-80">investors@viridiannexus.com</p>
+                <p className="opacity-80">veridiannexusdev@gmail.com</p>
               </div>
             </div>
           </div>
@@ -210,7 +210,7 @@ export default function Contact() {
                 className="mt-1 w-4 h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary"
               />
               <label htmlFor="privacy" className="text-sm text-gray-600 leading-relaxed">
-                I agree to the processing of my personal data in accordance with the <a href="/privacy" className="text-brand-primary font-bold hover:underline">Privacy Policy</a>. I understand that Viridian Nexus will use this information to contact me regarding my inquiry.
+                I agree to the processing of my personal data in accordance with the <a href="/privacy" className="text-brand-primary font-bold hover:underline">Privacy Policy</a>. I understand that Viridian Nexus Development Ltd. will use this information to contact me regarding my inquiry.
               </label>
             </div>
 

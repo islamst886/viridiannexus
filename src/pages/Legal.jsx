@@ -83,7 +83,7 @@ export default function Legal() {
                 </div>
                 <div className="prose prose-gray max-w-none">
                   <p className="text-gray-600 leading-relaxed mb-8">
-                    Viridian Nexus operates strictly under the legal umbrella of the <strong>Real Estate Development and Management Act, 2010</strong> of Bangladesh. We guarantee full statutory compliance to safeguard our clients' investments.
+                    Viridian Nexus Development Ltd. operates strictly under the legal umbrella of the <strong>Real Estate Development and Management Act, 2010</strong> of Bangladesh. We guarantee full statutory compliance to safeguard our clients' investments.
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
@@ -148,21 +148,21 @@ export default function Legal() {
                   <div>
                     <h3 className="text-lg font-bold text-brand-dark mb-3 flex items-center gap-2"><span className="text-brand-primary">2.</span> Force Majeure</h3>
                     <p>
-                      Viridian Nexus shall not be held liable for delays or failures in performance resulting from circumstances beyond reasonable control. This includes, but is not limited to: Acts of God (floods, earthquakes, natural disasters), government interventions, strikes, lockouts, national emergencies, pandemics, or unforeseen systemic supply chain disruptions. In such events, handover timelines will be extended proportionally without penalty.
+                      Viridian Nexus Development Ltd. shall not be held liable for delays or failures in performance resulting from circumstances beyond reasonable control. This includes, but is not limited to: Acts of God (floods, earthquakes, natural disasters), government interventions, strikes, lockouts, national emergencies, pandemics, or unforeseen systemic supply chain disruptions. In such events, handover timelines will be extended proportionally without penalty.
                     </p>
                   </div>
 
                   <div>
                     <h3 className="text-lg font-bold text-brand-dark mb-3 flex items-center gap-2"><span className="text-brand-primary">3.</span> Limitation of Liability</h3>
                     <p>
-                      Under no circumstances shall Viridian Nexus, its directors, employees, or affiliates be liable for any indirect, incidental, special, consequential, or punitive damages arising out of the use of this website, reliance on its content, or early-stage investment decisions made prior to a formalized legal contract.
+                      Under no circumstances shall Viridian Nexus Development Ltd., its directors, employees, or affiliates be liable for any indirect, incidental, special, consequential, or punitive damages arising out of the use of this website, reliance on its content, or early-stage investment decisions made prior to a formalized legal contract.
                     </p>
                   </div>
 
                   <div>
                     <h3 className="text-lg font-bold text-brand-dark mb-3 flex items-center gap-2"><span className="text-brand-primary">4.</span> Payment Defaults & Cancellations</h3>
                     <p>
-                      In the event of consecutive payment defaults by the buyer as per the agreed schedule, Viridian Nexus reserves the right to issue legal notices. Failure to rectify defaults within the statutory 60-day grace period grants the company the right to cancel the allotment and release the unit. Refunds will be processed strictly as per the Real Estate Act, 2010, deducting administrative penalties.
+                      In the event of consecutive payment defaults by the buyer as per the agreed schedule, Viridian Nexus Development Ltd. reserves the right to issue legal notices. Failure to rectify defaults within the statutory 60-day grace period grants the company the right to cancel the allotment and release the unit. Refunds will be processed strictly as per the Real Estate Act, 2010, deducting administrative penalties.
                     </p>
                   </div>
                   
@@ -182,14 +182,14 @@ export default function Legal() {
                 <div className="prose prose-gray max-w-none text-gray-600 text-sm leading-relaxed space-y-6">
                   <p className="text-xs text-brand-primary uppercase tracking-wider font-bold bg-brand-primary/10 inline-block px-3 py-1 rounded-full">Last Updated: September 2026</p>
                   <p className="text-base mt-4">
-                    By accessing and using the Viridian Nexus portal (the "Platform"), you agree to be bound by these Terms of Service. If you do not agree, you must refrain from using the Platform.
+                    By accessing and using the Viridian Nexus Development Ltd. portal (the "Platform"), you agree to be bound by these Terms of Service. If you do not agree, you must refrain from using the Platform.
                   </p>
 
                   <div className="space-y-8 mt-8">
                     <div>
                       <h3 className="text-lg font-bold text-brand-dark mb-3 border-b border-gray-100 pb-2">1. User Accounts & Security</h3>
                       <p>
-                        You are responsible for maintaining the confidentiality of your account credentials. The Platform provides tools to track bookings and financial ledgers. Viridian Nexus will not be liable for any loss arising from your failure to protect your login information.
+                        You are responsible for maintaining the confidentiality of your account credentials. The Platform provides tools to track bookings and financial ledgers. Viridian Nexus Development Ltd. will not be liable for any loss arising from your failure to protect your login information.
                       </p>
                     </div>
 
