@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MapPin, Phone, Mail, Loader2, ChevronDown } from 'lucide-react';
-import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../supabase';
 import { toast } from 'react-toastify';
 import { useGlobalState } from '../context/GlobalState';
 import { Link, useLocation } from 'react-router-dom';
@@ -75,15 +74,19 @@ export default function Contact() {
 
     setLoading(true);
     try {
-      await addDoc(collection(db, 'inquiries'), {
-        ...formData,
-        propertyName: propertyParam ? formatPropertyName(propertyParam) : null,
+      const { error } = await supabase.from('inquiries').insert({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        inquiry_type: formData.inquiryType,
+        message: formData.message,
+        property_name: propertyParam ? formatPropertyName(propertyParam) : null,
         status: 'Unread',
         source: 'Corporate Contact Page',
-        createdAt: serverTimestamp()
       });
-      
-      toast.success("Thank you! Your inquiry has been submitted successfully.");
+      if (error) throw error;
+
+      toast.success('Thank you! Your inquiry has been submitted successfully.');
       setFormData({
         name: '',
         phone: '',
@@ -93,8 +96,8 @@ export default function Contact() {
       });
       setAgreed(false);
     } catch (error) {
-      console.error("Error submitting inquiry:", error);
-      toast.error("Something went wrong. Please try again.");
+      console.error('Error submitting inquiry:', error);
+      toast.error('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

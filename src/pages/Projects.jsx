@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search, MapPin, ChevronRight, SlidersHorizontal, X } from 'lucide-react';
 import { usePropertyTypes } from '../hooks/usePropertyTypes';

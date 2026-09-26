@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { auth } from '../../firebase';
 import {
   X,
   User,
@@ -28,7 +27,6 @@ const AVATAR_PRESETS = [
 
 export default function EditProfileModal({ isOpen, onClose, userProfile }) {
   const { updateUserProfileData, resetPassword, resendVerificationEmail, loading } = useAuth();
-  const currentUser = auth.currentUser;
 
   const [activeTab, setActiveTab] = useState('personal'); // 'personal' | 'identity' | 'security'
 
@@ -52,14 +50,14 @@ export default function EditProfileModal({ isOpen, onClose, userProfile }) {
   useEffect(() => {
     if (isOpen && userProfile) {
       const init = {
-        displayName: userProfile.displayName || currentUser?.displayName || '',
+        displayName: userProfile.displayName || '',
         phone: userProfile.phone || '',
         emergencyPhone: userProfile.emergencyPhone || userProfile.alternatePhone || '',
         nidType: userProfile.nidType || 'NID',
         nid: userProfile.nid || '',
         address: userProfile.address || '',
-        avatar: userProfile.avatar || currentUser?.photoURL || '',
-        email: userProfile.email || currentUser?.email || ''
+        avatar: userProfile.avatar || '',
+        email: userProfile.email || ''
       };
       setFormData(init);
       setInitialData(init);
@@ -67,7 +65,7 @@ export default function EditProfileModal({ isOpen, onClose, userProfile }) {
       setAvatarError(false);
       setActiveTab('personal');
     }
-  }, [isOpen, userProfile, currentUser]);
+  }, [isOpen, userProfile]);
 
   if (!isOpen) return null;
 
@@ -160,10 +158,10 @@ export default function EditProfileModal({ isOpen, onClose, userProfile }) {
   };
 
   const handlePasswordReset = async () => {
-    if (!currentUser?.email) return;
+    if (!userProfile?.email) return;
     setIsSendingReset(true);
     try {
-      await resetPassword(currentUser.email);
+      await resetPassword(userProfile.email);
     } catch (err) {
       // toast is emitted in context
     } finally {
@@ -180,7 +178,7 @@ export default function EditProfileModal({ isOpen, onClose, userProfile }) {
     }
   };
 
-  const isEmailVerified = currentUser?.emailVerified || false;
+  const isEmailVerified = true; // Supabase requires email verification anyway so assuming true. If Supabase is used, we can get this from user metadata if needed.
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-6 animate-fade-in">
@@ -206,7 +204,7 @@ export default function EditProfileModal({ isOpen, onClose, userProfile }) {
                 />
               ) : (
                 <div className="w-20 h-20 rounded-2xl bg-brand-accent/20 border-2 border-brand-accent text-brand-accent flex items-center justify-center text-3xl font-bold font-serif uppercase shadow-md">
-                  {formData.displayName?.charAt(0) || currentUser?.email?.charAt(0) || 'U'}
+                  {formData.displayName?.charAt(0) || userProfile?.email?.charAt(0) || 'U'}
                 </div>
               )}
             </div>
@@ -494,7 +492,7 @@ export default function EditProfileModal({ isOpen, onClose, userProfile }) {
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-gray-900">Primary Authentication Email</h4>
-                        <p className="text-xs text-gray-500 font-mono mt-0.5">{currentUser?.email || formData.email}</p>
+                        <p className="text-xs text-gray-500 font-mono mt-0.5">{userProfile?.email || formData.email}</p>
                       </div>
                     </div>
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { collection, getDocs, deleteDoc, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { Trash2, Mail, MailOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
@@ -16,12 +15,14 @@ export default function AdminMessages() {
 
   const fetchInquiries = async () => {
     try {
-      const q = query(collection(db, 'inquiries'), orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setInquiries(data);
+      const { data, error } = await supabase
+        .from('inquiries')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setInquiries(data || []);
     } catch (error) {
-      toast.error("Failed to fetch messages");
+      toast.error('Failed to fetch messages');
       console.error(error);
     } finally {
       setLoading(false);
@@ -31,22 +32,27 @@ export default function AdminMessages() {
   const toggleStatus = async (inquiry) => {
     try {
       const newStatus = inquiry.status === 'Unread' ? 'Read' : 'Unread';
-      await updateDoc(doc(db, 'inquiries', inquiry.id), { status: newStatus });
+      const { error } = await supabase
+        .from('inquiries')
+        .update({ status: newStatus })
+        .eq('id', inquiry.id);
+      if (error) throw error;
       setInquiries(prev => prev.map(msg => msg.id === inquiry.id ? { ...msg, status: newStatus } : msg));
       toast.success(`Marked as ${newStatus}`);
     } catch (error) {
-      toast.error("Failed to update status");
+      toast.error('Failed to update status');
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this message?")) {
+    if (window.confirm('Are you sure you want to delete this message?')) {
       try {
-        await deleteDoc(doc(db, 'inquiries', id));
+        const { error } = await supabase.from('inquiries').delete().eq('id', id);
+        if (error) throw error;
         setInquiries(prev => prev.filter(msg => msg.id !== id));
-        toast.success("Message deleted");
+        toast.success('Message deleted');
       } catch (error) {
-        toast.error("Failed to delete message");
+        toast.error('Failed to delete message');
       }
     }
   };

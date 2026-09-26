@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { doc, getDoc, collection, onSnapshot, query, orderBy, updateDoc, addDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import AdminSidebar from '../../components/AdminSidebar';
 import { useGlobalState } from '../../context/GlobalState';
@@ -52,19 +51,27 @@ export default function AdminBookingDetail() {
   const [syncingProfile, setSyncingProfile] = useState(false);
 
   useEffect(() => {
-    if (!booking?.linkedUserId) {
+    if (!booking?.linked_user_id) {
       setLinkedUser(null);
       return;
     }
 
-    const uSub = onSnapshot(doc(db, 'users', booking.linkedUserId), (docSnap) => {
-      if (docSnap.exists()) {
-        setLinkedUser({ id: docSnap.id, ...docSnap.data() });
+    const fetchUser = async () => {
+      const { data } = await supabase.from('profiles').select('*').eq('id', booking.linked_user_id).single();
+      if (data) {
+        setLinkedUser({ 
+          id: data.id, 
+          displayName: data.display_name,
+          phone: data.phone,
+          email: data.email,
+          nidType: data.nid_type,
+          nid: data.nid,
+          address: data.address
+        });
       }
-    });
-
-    return () => uSub();
-  }, [booking?.linkedUserId]);
+    };
+    fetchUser();
+  }, [booking?.linked_user_id]);
 
   const profileDifferences = React.useMemo(() => {
     if (!booking || !linkedUser) return [];
@@ -98,23 +105,21 @@ export default function AdminBookingDetail() {
     setSyncingProfile(true);
     try {
       const updates = {
-        clientName: linkedUser.displayName || booking.clientName,
-        clientPhone: linkedUser.phone || booking.clientPhone,
-        clientEmail: linkedUser.email || booking.clientEmail,
-        clientNid: linkedUser.nid || booking.clientNid || '',
-        clientNidType: linkedUser.nidType || booking.clientNidType || 'NID',
-        clientAddress: linkedUser.address || booking.clientAddress || '',
-        lastUpdatedAt: serverTimestamp(),
-        lastUpdatedBy: adminUid
+        client_name: linkedUser.displayName || booking.clientName,
+        client_phone: linkedUser.phone || booking.clientPhone,
+        client_email: linkedUser.email || booking.clientEmail,
+        client_nid: linkedUser.nid || booking.clientNid || '',
+        client_address: linkedUser.address || booking.clientAddress || '',
+        last_updated_by: adminUid
       };
 
-      await updateDoc(doc(db, 'bookings', bookingId), updates);
+      await supabase.from('bookings').update(updates).eq('id', bookingId);
 
-      await addDoc(collection(db, `bookings/${bookingId}/activityLog`), {
+      await supabase.from('booking_activity_log').insert({
+        booking_id: bookingId,
         action: "Client Details Synced",
         detail: `Client details synchronized with linked user account (${linkedUser.email}) by ${adminName}`,
-        performedBy: adminName,
-        performedAt: serverTimestamp()
+        performed_by: adminName
       });
 
       toast.success("Client details synchronized with user profile!");
@@ -127,28 +132,82 @@ export default function AdminBookingDetail() {
   };
 
   useEffect(() => {
-    // 1. Booking Doc
-    const bSub = onSnapshot(doc(db, 'bookings', bookingId), (docSnap) => {
-      if (docSnap.exists()) {
-        setBooking({ id: docSnap.id, ...docSnap.data() });
-      } else {
+    const fetchBooking = async () => {
+      const { data, error } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
+      if (error || !data) {
         toast.error('Booking not found');
         navigate('/admin/bookings');
+        return;
       }
+      setBooking({
+        id: data.id,
+        bookingRef: data.booking_ref,
+        clientName: data.client_name,
+        clientPhone: data.client_phone,
+        clientEmail: data.client_email,
+        clientNid: data.client_nid,
+        clientAddress: data.client_address,
+        linkedUserId: data.linked_user_id,
+        propertyName: data.property_name,
+        propertyLocation: data.property_location,
+        propertyId: data.property_id,
+        inventoryId: data.inventory_id,
+        unitType: data.unit_type,
+        unitNumber: data.unit_number,
+        parkingIncluded: data.parking_included,
+        totalPrice: data.total_price,
+        totalPaid: data.total_paid,
+        balanceDue: data.balance_due,
+        stage: data.stage,
+        status: data.status,
+        createdAt: data.created_at,
+        cancellationDate: data.cancellation_date,
+        cancelledBy: data.cancelled_by,
+        cancellationNote: data.cancellation_note
+      });
       setLoading(false);
-    });
+    };
 
-    // 2. Payments Ledger
-    const pSub = onSnapshot(query(collection(db, `bookings/${bookingId}/payments`), orderBy('scheduledDate', 'asc')), (snap) => {
-      setPayments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const fetchPayments = async () => {
+      const { data } = await supabase.from('booking_payments').select('*').eq('booking_id', bookingId).order('scheduled_date', { ascending: true });
+      if (data) {
+        setPayments(data.map(d => ({
+          id: d.id,
+          type: d.type,
+          installmentNumber: d.installment_number,
+          scheduledDate: d.scheduled_date,
+          scheduledAmount: d.scheduled_amount,
+          status: d.status,
+          receivedAmount: d.received_amount,
+          paymentMode: d.payment_mode
+        })));
+      }
+    };
 
-    // 3. Activity Log
-    const aSub = onSnapshot(query(collection(db, `bookings/${bookingId}/activityLog`), orderBy('performedAt', 'desc')), (snap) => {
-      setActivity(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const fetchActivity = async () => {
+      const { data } = await supabase.from('booking_activity_log').select('*').eq('booking_id', bookingId).order('created_at', { ascending: false });
+      if (data) {
+        setActivity(data.map(d => ({
+          id: d.id,
+          action: d.action,
+          detail: d.detail,
+          performedBy: d.performed_by,
+          performedAt: d.created_at
+        })));
+      }
+    };
 
-    return () => { bSub(); pSub(); aSub(); };
+    fetchBooking();
+    fetchPayments();
+    fetchActivity();
+
+    const sub = supabase.channel(`booking_detail_${bookingId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `id=eq.${bookingId}` }, fetchBooking)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_payments', filter: `booking_id=eq.${bookingId}` }, fetchPayments)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_activity_log', filter: `booking_id=eq.${bookingId}` }, fetchActivity)
+      .subscribe();
+
+    return () => supabase.removeChannel(sub);
   }, [bookingId, navigate]);
 
   const handleStatusChange = async (newStatus) => {
@@ -157,17 +216,16 @@ export default function AdminBookingDetail() {
     if (!window.confirm(`Are you sure you want to ${actionText}?`)) return;
     
     try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
+      await supabase.from('bookings').update({
         status: newStatus,
-        lastUpdatedAt: serverTimestamp(),
-        lastUpdatedBy: adminUid
-      });
+        last_updated_by: adminUid
+      }).eq('id', bookingId);
 
-      await addDoc(collection(db, `bookings/${bookingId}/activityLog`), {
+      await supabase.from('booking_activity_log').insert({
+        booking_id: bookingId,
         action: "Status Changed",
         detail: `Booking status changed to ${newStatus}`,
-        performedBy: adminName,
-        performedAt: serverTimestamp()
+        performed_by: adminName
       });
       toast.success(`Booking ${newStatus === 'On Hold' ? 'put on hold' : 'resumed'}`);
     } catch (error) {
@@ -184,8 +242,7 @@ export default function AdminBookingDetail() {
 
   const formatDate = (ts) => {
     if (!ts) return 'N/A';
-    // Handle Firestore Timestamp
-    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    const date = new Date(ts);
     return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
@@ -488,7 +545,7 @@ export default function AdminBookingDetail() {
                         <tr><td colSpan={7} className="text-center py-8 text-gray-500">No payments scheduled</td></tr>
                       ) : (
                         payments.map((p) => {
-                          const isOverdue = p.status === 'Scheduled' && (p.scheduledDate.toDate ? p.scheduledDate.toDate() : new Date(p.scheduledDate)) < new Date();
+                          const isOverdue = p.status === 'Scheduled' && new Date(p.scheduledDate) < new Date();
                           
                           let statusBadge = '';
                           if (p.status === 'Paid') statusBadge = 'bg-green-100 text-green-800';
@@ -676,32 +733,30 @@ function PaymentModal({ payment, bookingId, adminName, adminUid, onClose }) {
       const isFull = numAmount >= payment.scheduledAmount;
       
       // Update Payment Doc
-      await updateDoc(doc(db, `bookings/${bookingId}/payments`, payment.id), {
-        receivedAmount: numAmount,
-        paymentMode: mode,
-        referenceNumber: ref,
+      await supabase.from('booking_payments').update({
+        received_amount: numAmount,
+        payment_mode: mode,
+        reference_number: ref,
         note: note,
         status: isFull ? 'Paid' : 'Partially Paid',
-        paidDate: serverTimestamp(),
-        recordedBy: adminUid
-      });
+        paid_date: new Date().toISOString(),
+        recorded_by: adminUid
+      }).eq('id', payment.id);
 
       // Update Booking Totals
-      const bookingRef = doc(db, 'bookings', bookingId);
-      const bookingDoc = await getDoc(bookingRef);
-      if (bookingDoc.exists()) {
-        const data = bookingDoc.data();
-        const newTotalPaid = (Number(data.totalPaid) || 0) + numAmount;
-        const newBalance = Math.max(0, Number(data.totalPrice) - newTotalPaid);
+      const { data: bookingDoc, error: bErr } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
+      if (!bErr && bookingDoc) {
+        const newTotalPaid = (Number(bookingDoc.total_paid) || 0) + numAmount;
+        const newBalance = Math.max(0, Number(bookingDoc.total_price) - newTotalPaid);
         
-        let nextStage = data.stage;
+        let nextStage = bookingDoc.stage;
         
         if (isFull) {
-          if (payment.type === 'Token' && STAGES.indexOf(data.stage) < STAGES.indexOf('Token Paid')) {
+          if (payment.type === 'Token' && STAGES.indexOf(bookingDoc.stage) < STAGES.indexOf('Token Paid')) {
             nextStage = 'Token Paid';
-          } else if (payment.type === 'Down Payment' && STAGES.indexOf(data.stage) < STAGES.indexOf('Down Payment Paid')) {
+          } else if (payment.type === 'Down Payment' && STAGES.indexOf(bookingDoc.stage) < STAGES.indexOf('Down Payment Paid')) {
             nextStage = 'Down Payment Paid';
-          } else if (payment.type.startsWith('Installment') && STAGES.indexOf(data.stage) < STAGES.indexOf('Installments Running')) {
+          } else if (payment.type.startsWith('Installment') && STAGES.indexOf(bookingDoc.stage) < STAGES.indexOf('Installments Running')) {
             nextStage = 'Installments Running';
           }
         }
@@ -710,21 +765,20 @@ function PaymentModal({ payment, bookingId, adminName, adminUid, onClose }) {
           nextStage = 'Fully Paid';
         }
 
-        await updateDoc(bookingRef, {
-          totalPaid: newTotalPaid,
-          balanceDue: newBalance,
+        await supabase.from('bookings').update({
+          total_paid: newTotalPaid,
+          balance_due: newBalance,
           stage: nextStage,
-          lastUpdatedAt: serverTimestamp(),
-          lastUpdatedBy: adminUid
-        });
+          last_updated_by: adminUid
+        }).eq('id', bookingId);
       }
 
       // Log
-      await addDoc(collection(db, `bookings/${bookingId}/activityLog`), {
+      await supabase.from('booking_activity_log').insert({
+        booking_id: bookingId,
         action: "Payment Recorded",
         detail: `${payment.type} payment of ৳${numAmount.toLocaleString()} received via ${mode}`,
-        performedBy: adminName,
-        performedAt: serverTimestamp()
+        performed_by: adminName
       });
 
       toast.success("Payment recorded successfully");
@@ -794,38 +848,35 @@ function CustomPaymentModal({ bookingId, adminName, adminUid, onClose }) {
       const numAmount = Number(amount);
       
       // Create new scheduled payment
-      await addDoc(collection(db, `bookings/${bookingId}/payments`), {
+      await supabase.from('booking_payments').insert({
+        booking_id: bookingId,
         type: type,
-        scheduledAmount: numAmount,
-        scheduledDate: new Date(dueDate),
+        scheduled_amount: numAmount,
+        scheduled_date: new Date(dueDate).toISOString(),
         status: 'Scheduled',
-        receivedAmount: 0,
-        createdAt: serverTimestamp(),
-        createdBy: adminUid
+        received_amount: 0,
+        recorded_by: adminUid
       });
 
       // Update Booking Total Price
-      const bookingRef = doc(db, 'bookings', bookingId);
-      const bookingDoc = await getDoc(bookingRef);
-      if (bookingDoc.exists()) {
-        const data = bookingDoc.data();
-        const newTotalPrice = (Number(data.totalPrice) || 0) + numAmount;
-        const newBalance = Math.max(0, newTotalPrice - (Number(data.totalPaid) || 0));
+      const { data: bookingDoc, error: bErr } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
+      if (!bErr && bookingDoc) {
+        const newTotalPrice = (Number(bookingDoc.total_price) || 0) + numAmount;
+        const newBalance = Math.max(0, newTotalPrice - (Number(bookingDoc.total_paid) || 0));
         
-        await updateDoc(bookingRef, {
-          totalPrice: newTotalPrice,
-          balanceDue: newBalance,
-          lastUpdatedAt: serverTimestamp(),
-          lastUpdatedBy: adminUid
-        });
+        await supabase.from('bookings').update({
+          total_price: newTotalPrice,
+          balance_due: newBalance,
+          last_updated_by: adminUid
+        }).eq('id', bookingId);
       }
 
       // Log
-      await addDoc(collection(db, `bookings/${bookingId}/activityLog`), {
+      await supabase.from('booking_activity_log').insert({
+        booking_id: bookingId,
         action: "Custom Payment Added",
         detail: `Added ${type} for ৳${numAmount.toLocaleString()}`,
-        performedBy: adminName,
-        performedAt: serverTimestamp()
+        performed_by: adminName
       });
 
       toast.success("Custom payment scheduled successfully");
@@ -885,17 +936,20 @@ function EditClientModal({ booking, adminName, adminUid, onClose }) {
     setLoading(true);
 
     try {
-      await updateDoc(doc(db, 'bookings', booking.id), {
-        ...formData,
-        lastUpdatedAt: serverTimestamp(),
-        lastUpdatedBy: adminUid
-      });
+      await supabase.from('bookings').update({
+        client_name: formData.clientName,
+        client_phone: formData.clientPhone,
+        client_email: formData.clientEmail,
+        client_nid: formData.clientNid,
+        client_address: formData.clientAddress,
+        last_updated_by: adminUid
+      }).eq('id', booking.id);
 
-      await addDoc(collection(db, `bookings/${booking.id}/activityLog`), {
+      await supabase.from('booking_activity_log').insert({
+        booking_id: booking.id,
         action: "Client Details Updated",
         detail: `Client information was updated by ${adminName}`,
-        performedBy: adminName,
-        performedAt: serverTimestamp()
+        performed_by: adminName
       });
 
       toast.success("Client details updated successfully");
@@ -964,11 +1018,22 @@ function ChangeUnitModal({ booking, adminName, adminUid, onClose }) {
 
   useEffect(() => {
     // Fetch all active properties to allow selection
-    const unsub = onSnapshot(collection(db, 'properties'), (snap) => {
-      setProperties(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const fetchProps = async () => {
+      const { data } = await supabase.from('properties').select('*');
+      if (data) {
+        setProperties(data.map(d => ({
+          id: d.id,
+          name: d.name,
+          location: d.location,
+          inventory: d.inventory,
+          availableUnits: d.available_units,
+          parkingPrice: d.parking_price,
+          parkingInventory: d.parking_inventory
+        })));
+      }
       setLoadingProps(false);
-    });
-    return () => unsub();
+    };
+    fetchProps();
   }, []);
 
   const currentProperty = properties.find(p => p.id === selectedPropertyId);
@@ -987,82 +1052,64 @@ function ChangeUnitModal({ booking, adminName, adminUid, onClose }) {
   const executeReassignment = async () => {
     setSubmitting(true);
       try {
-        await runTransaction(db, async (transaction) => {
-          const oldPropRef = doc(db, 'properties', booking.propertyId);
-          const newPropRef = doc(db, 'properties', selectedPropertyId);
-          const bookingRef = doc(db, 'bookings', booking.id);
+        // We will perform sequential updates
+        // 1. Fetch properties
+        const { data: oldProp } = await supabase.from('properties').select('*').eq('id', booking.propertyId).single();
+        const { data: newProp } = await supabase.from('properties').select('*').eq('id', selectedPropertyId).single();
+        
+        if (!oldProp || !newProp) throw new Error("Property documents not found.");
+        
+        let oldInv = oldProp.inventory || [];
+        let newInv = newProp.inventory || [];
+        
+        // If it's the same property, newInv points to the same oldInv content but we need to merge logic
+        if (booking.propertyId === selectedPropertyId) {
+          newInv = oldInv; 
+        }
 
-          // Read both property documents (must happen before any writes)
-          const oldPropDoc = await transaction.get(oldPropRef);
-          let newPropDoc;
-          
-          if (oldPropRef.id === newPropRef.id) {
-            newPropDoc = oldPropDoc; // They are the same document
-          } else {
-            newPropDoc = await transaction.get(newPropRef);
-          }
+        const oldUnitIndex = oldInv.findIndex(u => u.id === booking.inventoryId);
+        const newUnitIndex = newInv.findIndex(u => u.id === selectedInventoryId);
 
-          if (!oldPropDoc.exists()) throw new Error("Old property document not found.");
-          if (!newPropDoc.exists()) throw new Error("New property document not found.");
+        if (newUnitIndex === -1) throw new Error("Selected new unit not found.");
+        if (newInv[newUnitIndex].status !== 'Available') throw new Error("Selected unit is no longer available. Someone else may have just booked it.");
 
-          const oldData = oldPropDoc.data();
-          const oldInv = oldData.inventory || [];
-          
-          let newData, newInv;
-          if (oldPropRef.id === newPropRef.id) {
-            newData = oldData; // Use exact same object reference
-            newInv = oldInv;   // Use exact same array reference
-          } else {
-            newData = newPropDoc.data();
-            newInv = newData.inventory || [];
-          }
+        // State updates
+        if (oldUnitIndex !== -1) {
+          oldInv[oldUnitIndex].status = 'Available'; // Release old
+        }
+        newInv[newUnitIndex].status = 'Booked'; // Lock new
 
-          const oldUnitIndex = oldInv.findIndex(u => u.id === booking.inventoryId);
-          const newUnitIndex = newInv.findIndex(u => u.id === selectedInventoryId);
+        // Writes
+        if (booking.propertyId === selectedPropertyId) {
+          await supabase.from('properties').update({ inventory: oldInv }).eq('id', booking.propertyId);
+        } else {
+          await supabase.from('properties').update({ inventory: oldInv }).eq('id', booking.propertyId);
+          await supabase.from('properties').update({ inventory: newInv }).eq('id', selectedPropertyId);
+        }
 
-          if (newUnitIndex === -1) throw new Error("Selected new unit not found.");
-          if (newInv[newUnitIndex].status !== 'Available') throw new Error("Selected unit is no longer available. Someone else may have just booked it.");
+        // Format unit string
+        const unitType = newInv[newUnitIndex].unitType || '';
+        const unitNumber = `Floor ${newInv[newUnitIndex].floor || ''}, ${
+          (unitType).toLowerCase().includes((newInv[newUnitIndex].unitName || '').toLowerCase()) 
+          ? (newInv[newUnitIndex].unitName || '') 
+          : `Unit ${newInv[newUnitIndex].unitName || ''}`
+        }`;
 
-          // State updates
-          if (oldUnitIndex !== -1) {
-            oldInv[oldUnitIndex].status = 'Available'; // Release old
-          }
-          newInv[newUnitIndex].status = 'Booked'; // Lock new
+        await supabase.from('bookings').update({
+          property_id: selectedPropertyId,
+          property_name: newProp.name,
+          property_location: newProp.location,
+          inventory_id: selectedInventoryId,
+          unit_type: unitType,
+          unit_number: unitNumber,
+          last_updated_by: adminUid
+        }).eq('id', booking.id);
 
-          // Writes
-          if (oldPropRef.id === newPropRef.id) {
-            transaction.update(oldPropRef, { inventory: oldInv }); // Same reference
-          } else {
-            transaction.update(oldPropRef, { inventory: oldInv });
-            transaction.update(newPropRef, { inventory: newInv });
-          }
-
-          // Format unit string
-          const unitType = newInv[newUnitIndex].unitType || '';
-          const unitNumber = `Floor ${newInv[newUnitIndex].floor || ''}, ${
-            (unitType).toLowerCase().includes((newInv[newUnitIndex].unitName || '').toLowerCase()) 
-            ? (newInv[newUnitIndex].unitName || '') 
-            : `Unit ${newInv[newUnitIndex].unitName || ''}`
-          }`;
-
-          transaction.update(bookingRef, {
-            propertyId: selectedPropertyId,
-            propertyName: newData.name,
-            propertyLocation: newData.location,
-            inventoryId: selectedInventoryId,
-            unitType: unitType,
-            unitNumber: unitNumber,
-            lastUpdatedAt: serverTimestamp(),
-            lastUpdatedBy: adminUid
-          });
-
-          const logRef = doc(collection(db, `bookings/${booking.id}/activityLog`));
-          transaction.set(logRef, {
-            action: "Unit Reassigned",
-            detail: `Moved from ${booking.propertyName} (${booking.unitType}) to ${newData.name} (${unitType})`,
-            performedBy: adminName,
-            performedAt: serverTimestamp()
-          });
+        await supabase.from('booking_activity_log').insert({
+          booking_id: booking.id,
+          action: "Unit Reassigned",
+          detail: `Moved from ${booking.propertyName} (${booking.unitType}) to ${newProp.name} (${unitType})`,
+          performed_by: adminName
         });
 
         toast.success("Unit successfully changed!");

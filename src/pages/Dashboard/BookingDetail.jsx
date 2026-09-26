@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { doc, getDoc, collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../../context/GlobalState';
 import { ArrowLeft, CheckCircle, Clock, FileText, Loader2, Building, DollarSign } from 'lucide-react';
@@ -24,27 +23,68 @@ export default function BookingDetail() {
       return;
     }
 
-    // 1. Fetch Booking and verify ownership
-    const bSub = onSnapshot(doc(db, 'bookings', bookingId), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.linkedUserId !== userProfile.uid) {
-          navigate('/dashboard'); // unauthorized
-          return;
-        }
-        setBooking({ id: docSnap.id, ...data });
-      } else {
+    const fetchData = async () => {
+      // 1. Fetch Booking and verify ownership
+      const { data: bookingData, error: bErr } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', bookingId)
+        .single();
+        
+      if (bErr || !bookingData) {
         navigate('/dashboard');
+        return;
+      }
+      
+      if (bookingData.linked_user_id !== userProfile.uid) {
+        navigate('/dashboard'); // unauthorized
+        return;
+      }
+      
+      setBooking({
+        id: bookingData.id,
+        bookingRef: bookingData.booking_ref,
+        propertyName: bookingData.property_name,
+        unitType: bookingData.unit_type,
+        unitNumber: bookingData.unit_number,
+        parkingIncluded: bookingData.parking_included,
+        parkingRequested: bookingData.parking_requested,
+        status: bookingData.status,
+        stage: bookingData.stage,
+        totalPrice: bookingData.total_price,
+        totalPaid: bookingData.total_paid
+      });
+
+      // 2. Fetch Payments Ledger
+      const { data: paymentsData } = await supabase
+        .from('booking_payments')
+        .select('*')
+        .eq('booking_id', bookingId)
+        .order('scheduled_date', { ascending: true });
+        
+      if (paymentsData) {
+        setPayments(paymentsData.map(p => ({
+          id: p.id,
+          amount: p.amount,
+          status: p.status,
+          scheduledDate: p.scheduled_date,
+          paidDate: p.paid_date,
+          receiptUrl: p.receipt_url,
+          title: p.title
+        })));
       }
       setLoading(false);
-    });
+    };
 
-    // 2. Fetch Payments Ledger
-    const pSub = onSnapshot(query(collection(db, `bookings/${bookingId}/payments`), orderBy('scheduledDate', 'asc')), (snap) => {
-      setPayments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    fetchData();
 
-    return () => { bSub(); pSub(); };
+    const sub = supabase
+      .channel(`booking_${bookingId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `id=eq.${bookingId}` }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_payments', filter: `booking_id=eq.${bookingId}` }, fetchData)
+      .subscribe();
+
+    return () => supabase.removeChannel(sub);
   }, [bookingId, userProfile, navigate]);
 
   const formatMoney = (amount) => {
@@ -54,7 +94,7 @@ export default function BookingDetail() {
 
   const formatDate = (ts) => {
     if (!ts) return 'N/A';
-    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    const date = new Date(ts);
     return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 

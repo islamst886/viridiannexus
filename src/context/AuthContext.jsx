@@ -1,16 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { auth, db } from '../firebase';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  sendPasswordResetEmail,
-  sendEmailVerification,
-  updateProfile,
-  updateEmail,
-  verifyBeforeUpdateEmail
-} from 'firebase/auth';
-import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../supabase';
 import { toast } from 'react-toastify';
 
 const AuthContext = createContext();
@@ -19,26 +8,30 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
 
   const getFriendlyError = (error) => {
-    if (!error?.code) return error?.message || 'An error occurred. Please try again.';
-    switch (error.code) {
-      case 'auth/email-already-in-use': return 'An account with this email already exists.';
-      case 'auth/wrong-password': return 'Incorrect password. Please try again.';
-      case 'auth/user-not-found': return 'No account found with this email.';
-      case 'auth/invalid-credential':
-      case 'auth/invalid-login-credentials':
-        return 'Invalid email or password. Please try again.';
-      case 'auth/too-many-requests': return 'Too many attempts. Please wait and try again.';
-      case 'auth/network-request-failed': return 'Network error. Check your connection.';
-      case 'auth/requires-recent-login': return 'This action requires recent authentication. Please log out and sign in again.';
-      default: return error.message || 'An error occurred. Please try again.';
-    }
+    if (!error?.message) return 'An error occurred. Please try again.';
+    const msg = error.message.toLowerCase();
+    if (msg.includes('email already registered') || msg.includes('user already registered'))
+      return 'An account with this email already exists.';
+    if (msg.includes('invalid login credentials') || msg.includes('invalid email or password'))
+      return 'Invalid email or password. Please try again.';
+    if (msg.includes('email not confirmed'))
+      return 'Please verify your email before signing in.';
+    if (msg.includes('too many requests'))
+      return 'Too many attempts. Please wait and try again.';
+    if (msg.includes('network'))
+      return 'Network error. Check your connection.';
+    if (msg.includes('requires recent'))
+      return 'This action requires recent authentication. Please sign out and sign back in.';
+    return error.message || 'An error occurred. Please try again.';
   };
 
+  // ── Sign In ────────────────────────────────────────────────────────────────
   const signIn = async (email, password) => {
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      return userCredential;
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return data;
     } catch (error) {
       toast.error(getFriendlyError(error));
       throw error;
@@ -47,27 +40,24 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ── Sign Up ────────────────────────────────────────────────────────────────
+  // Profile row is auto-created by the DB trigger handle_new_user — no manual setDoc needed.
   const signUp = async (email, password, name, phone) => {
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      const randomReferral = 'VN-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-
-      await setDoc(doc(db, 'users', user.uid), {
-        displayName: name,
-        email: email,
-        phone: phone || '',
-        role: 'user',
-        isBanned: false,
-        referralCode: randomReferral,
-        createdAt: serverTimestamp(),
-        lastLoginAt: serverTimestamp()
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            display_name: name,
+            phone: phone || '',
+          },
+        },
       });
-
-      await sendEmailVerification(user);
-      return userCredential;
+      if (error) throw error;
+      toast.info('A verification email has been sent. Please check your inbox.');
+      return data;
     } catch (error) {
       toast.error(getFriendlyError(error));
       throw error;
@@ -76,9 +66,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ── Sign Out ───────────────────────────────────────────────────────────────
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       toast.success('You have been signed out.');
     } catch (error) {
       toast.error('Failed to sign out.');
@@ -86,9 +78,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ── Reset Password ─────────────────────────────────────────────────────────
   const resetPassword = async (email) => {
     try {
-      await sendPasswordResetEmail(auth, email);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth?reset=true`,
+      });
+      if (error) throw error;
       toast.success('A password reset link has been sent to your email.');
     } catch (error) {
       toast.error(getFriendlyError(error));
@@ -96,74 +92,84 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ── Resend Verification Email ──────────────────────────────────────────────
   const resendVerificationEmail = async () => {
     try {
-      const user = auth.currentUser;
-      if (!user) throw new Error("No authenticated user.");
-      if (user.emailVerified) {
-        toast.info("Your email is already verified.");
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user.');
+      if (user.email_confirmed_at) {
+        toast.info('Your email is already verified.');
         return;
       }
-      await sendEmailVerification(user);
-      toast.success("Verification email sent! Please check your inbox.");
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: user.email,
+      });
+      if (error) throw error;
+      toast.success('Verification email sent! Please check your inbox.');
     } catch (err) {
-      if (err.code === 'auth/too-many-requests') {
-        toast.warning("Too many verification requests. Please wait a few minutes.");
+      if (err.message?.toLowerCase().includes('too many')) {
+        toast.warning('Too many verification requests. Please wait a few minutes.');
       } else {
-        toast.error("Failed to send verification email.");
+        toast.error('Failed to send verification email.');
       }
     }
   };
 
+  // ── Update Profile ─────────────────────────────────────────────────────────
   const updateUserProfileData = async (data) => {
     setLoading(true);
     try {
-      const user = auth.currentUser;
-      if (!user) throw new Error("No authenticated user found.");
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error('No authenticated user found.');
 
-      // 1. Update Firebase Auth Profile (displayName, photoURL)
-      const authUpdates = {};
-      if (data.displayName !== undefined) authUpdates.displayName = data.displayName;
-      if (data.avatar !== undefined) authUpdates.photoURL = data.avatar;
-
-      if (Object.keys(authUpdates).length > 0) {
-        await updateProfile(user, authUpdates);
+      // 1. Update Supabase Auth metadata (displayName)
+      const authMeta = {};
+      if (data.displayName !== undefined) authMeta.display_name = data.displayName;
+      if (Object.keys(authMeta).length > 0) {
+        const { error: metaErr } = await supabase.auth.updateUser({ data: authMeta });
+        if (metaErr) throw metaErr;
       }
 
-      // 2. If email change was requested and differs from current auth email
+      // 2. Handle email change (requires verification)
       const docUpdates = { ...data };
       if (data.email && data.email.trim().toLowerCase() !== user.email?.toLowerCase()) {
-        try {
-          if (typeof verifyBeforeUpdateEmail === 'function') {
-            await verifyBeforeUpdateEmail(user, data.email.trim());
-            toast.info("A verification link has been sent to your new email. Please verify it to complete the update.");
-          } else if (typeof updateEmail === 'function') {
-            await updateEmail(user, data.email.trim());
-            toast.success("Login email updated.");
-          }
-        } catch (emailErr) {
-          console.warn("Auth email update issue:", emailErr);
-          if (emailErr.code === 'auth/requires-recent-login') {
-            toast.warning("For security, changing your email requires recent authentication. Please sign out and sign back in.");
-          } else if (emailErr.code === 'auth/email-already-in-use') {
-            toast.error("This email is already in use by another account.");
-          } else {
-            toast.error(getFriendlyError(emailErr));
-          }
-          // Don't overwrite the Firestore email if Auth rejected the change
+        const { error: emailErr } = await supabase.auth.updateUser({
+          email: data.email.trim(),
+        });
+        if (emailErr) {
+          toast.warning(
+            'Email change requires verification. Check your new email inbox.'
+          );
           delete docUpdates.email;
+        } else {
+          toast.info('A verification link has been sent to your new email.');
         }
       }
 
-      // 3. Update Firestore Document
-      docUpdates.updatedAt = serverTimestamp();
-      await updateDoc(doc(db, 'users', user.uid), docUpdates);
+      // 3. Build profiles table update (snake_case)
+      const profileUpdate = { updated_at: new Date().toISOString() };
+      if (docUpdates.displayName !== undefined) profileUpdate.display_name = docUpdates.displayName;
+      if (docUpdates.email !== undefined) profileUpdate.email = docUpdates.email;
+      if (docUpdates.phone !== undefined) profileUpdate.phone = docUpdates.phone;
+      if (docUpdates.avatar !== undefined) profileUpdate.avatar = docUpdates.avatar;
 
-      toast.success("Profile updated successfully!");
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('id', user.id);
+      if (profileErr) throw profileErr;
+
+      toast.success('Profile updated successfully!');
       return true;
     } catch (err) {
-      console.error("Profile update error:", err);
-      toast.error(getFriendlyError(err) || "Failed to update profile.");
+      console.error('Profile update error:', err);
+      toast.error(getFriendlyError(err) || 'Failed to update profile.');
       throw err;
     } finally {
       setLoading(false);
@@ -171,15 +177,17 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{
-      signIn,
-      signUp,
-      signOut,
-      resetPassword,
-      resendVerificationEmail,
-      updateUserProfileData,
-      loading
-    }}>
+    <AuthContext.Provider
+      value={{
+        signIn,
+        signUp,
+        signOut,
+        resetPassword,
+        resendVerificationEmail,
+        updateUserProfileData,
+        loading,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

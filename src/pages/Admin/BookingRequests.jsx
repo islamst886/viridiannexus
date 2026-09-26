@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, serverTimestamp, addDoc } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import AdminSidebar from '../../components/AdminSidebar';
 import { Loader2, CheckCircle, XCircle, Clock, Search, ExternalLink } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -17,12 +16,32 @@ export default function BookingRequests() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const q = query(collection(db, 'bookingRequests'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const fetchRequests = async () => {
+      const { data } = await supabase.from('booking_requests').select('*').order('created_at', { ascending: false });
+      if (data) {
+        setRequests(data.map(d => ({
+          id: d.id,
+          clientName: d.client_name,
+          clientEmail: d.client_email,
+          clientPhone: d.client_phone,
+          projectName: d.project_name,
+          unitType: d.unit_type,
+          parkingRequested: d.parking_requested,
+          status: d.status,
+          createdAt: d.created_at,
+          linkedUserId: d.linked_user_id
+        })));
+      }
       setLoading(false);
-    });
-    return () => unsub();
+    };
+
+    fetchRequests();
+
+    const sub = supabase.channel('public:booking_requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_requests' }, fetchRequests)
+      .subscribe();
+      
+    return () => supabase.removeChannel(sub);
   }, []);
 
   const handleReject = async (id, linkedUserId) => {
@@ -31,18 +50,18 @@ export default function BookingRequests() {
       return;
     }
     try {
-      await updateDoc(doc(db, 'bookingRequests', id), {
+      await supabase.from('booking_requests').update({
         status: 'Rejected',
-        rejectReason,
-        rejectedAt: serverTimestamp(),
-        rejectedBy: userProfile?.uid
-      });
+        reject_reason: rejectReason,
+        rejected_at: new Date().toISOString(),
+        rejected_by: userProfile?.uid
+      }).eq('id', id);
       
       if (linkedUserId) {
-        await addDoc(collection(db, `users/${linkedUserId}/notifications`), {
+        await supabase.from('notifications').insert({
+          user_id: linkedUserId,
           text: `Your expression of interest was not approved: ${rejectReason}`,
-          read: false,
-          createdAt: serverTimestamp()
+          read: false
         });
       }
 
@@ -129,7 +148,7 @@ export default function BookingRequests() {
                           {r.status === 'Rejected' && <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">Rejected</span>}
                         </td>
                         <td className="p-4 text-sm text-gray-500">
-                          {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : 'N/A'}
+                          {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A'}
                         </td>
                         <td className="p-4 text-right">
                           {r.status === 'Pending Review' && (

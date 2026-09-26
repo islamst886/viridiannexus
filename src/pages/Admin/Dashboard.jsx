@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { collection, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { supabase } from '../../supabase';
+import { deleteMedia } from '../../utils/supabaseStorage';
 import { Plus, Edit, Trash2, Users, Building, DollarSign } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
-import { deleteCloudinaryMedia } from '../../utils/cloudinary';
+import { useGlobalState } from '../../context/GlobalState';
 
 export default function AdminDashboard() {
   const [properties, setProperties] = useState([]);
@@ -14,94 +14,71 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ users: 0, properties: 0, value: 0 });
   const navigate = useNavigate();
 
+  const { properties: globalProperties, loadingProperties } = useGlobalState();
+
+  // Use GlobalState properties (already realtime)
   useEffect(() => {
-    // 1. Real-time Properties listener
-    const unsubProps = onSnapshot(collection(db, 'properties'), (snap) => {
-      const propsData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setProperties(propsData);
-      setStats(prev => ({ 
-        ...prev, 
-        properties: propsData.filter(p => p.status === 'Active').length 
-      }));
-      setLoading(false);
-    }, (error) => {
-      console.error(error);
-      toast.error("Failed to fetch properties");
-      setLoading(false);
-    });
+    setProperties(globalProperties);
+    setStats(prev => ({ ...prev, properties: globalProperties.filter(p => p.status === 'Active').length }));
+    setLoading(loadingProperties);
+  }, [globalProperties, loadingProperties]);
 
-    // 2. Real-time Users count listener
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      setStats(prev => ({ ...prev, users: snap.size }));
-    }, (error) => {
-      console.error(error);
-    });
-
-    // 3. Real-time Bookings Value listener (Excludes Cancelled bookings)
-    const unsubBookings = onSnapshot(collection(db, 'bookings'), (snap) => {
-      const activeBookings = snap.docs.map(d => d.data()).filter(b => b.status !== 'Cancelled');
-      const totalValue = activeBookings.reduce((acc, curr) => acc + (Number(curr.totalPrice) || 0), 0);
-      setStats(prev => ({ ...prev, value: totalValue }));
-    }, (error) => {
-      console.error(error);
-    });
-
-    return () => {
-      unsubProps();
-      unsubUsers();
-      unsubBookings();
+  // Fetch stats from Supabase
+  useEffect(() => {
+    const fetchStats = async () => {
+      const { count: usersCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+      const { data: bookingsData } = await supabase
+        .from('bookings')
+        .select('total_price, status')
+        .neq('status', 'Cancelled');
+      const totalValue = (bookingsData || []).reduce((acc, b) => acc + (Number(b.total_price) || 0), 0);
+      setStats(prev => ({ ...prev, users: usersCount || 0, value: totalValue }));
     };
+    fetchStats();
+
+    const statsSub = supabase
+      .channel('dashboard_stats')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchStats)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, fetchStats)
+      .subscribe();
+    return () => supabase.removeChannel(statsSub);
   }, []);
 
   const handleDelete = async (property) => {
-    if (window.confirm("Are you sure you want to delete this property? All associated media will also be permanently deleted.")) {
+    if (window.confirm('Are you sure you want to delete this property? All associated media will also be permanently deleted.')) {
       try {
-        // Gather all associated Cloudinary media for recursive deletion
+        // Gather all associated Supabase Storage media for recursive deletion
         const allMediaUrls = [];
         
-        // 1. Core images (hero, map, floorPlan, video, etc) and gallery arrays
         if (property.images) {
           Object.values(property.images).forEach(val => {
             if (Array.isArray(val)) {
-              val.forEach(url => {
-                if (url && typeof url === 'string' && url.includes('cloudinary.com')) {
-                  allMediaUrls.push(url);
-                }
-              });
-            } else if (val && typeof val === 'string' && val.includes('cloudinary.com')) {
+              val.forEach(url => { if (url && typeof url === 'string') allMediaUrls.push(url); });
+            } else if (val && typeof val === 'string') {
               allMediaUrls.push(val);
             }
           });
         }
-        
-        // 2. Brochure
-        if (property.brochureUrl && property.brochureUrl.includes('cloudinary.com')) {
-          allMediaUrls.push(property.brochureUrl);
-        }
-        
-        // 3. Milestone images
+        if (property.brochureUrl) allMediaUrls.push(property.brochureUrl);
         if (property.milestones && Array.isArray(property.milestones)) {
           property.milestones.forEach(m => {
-            if (m.images && Array.isArray(m.images)) {
-              m.images.forEach(url => {
-                if (url && url.includes('cloudinary.com')) allMediaUrls.push(url);
-              });
-            }
-            if (m.imageUrl && m.imageUrl.includes('cloudinary.com')) {
-              allMediaUrls.push(m.imageUrl);
-            }
+            if (m.images && Array.isArray(m.images)) m.images.forEach(url => { if (url) allMediaUrls.push(url); });
+            if (m.imageUrl) allMediaUrls.push(m.imageUrl);
           });
         }
 
         if (allMediaUrls.length > 0) {
-          toast.info(`Deleting ${allMediaUrls.length} associated media files from Cloudinary...`);
-          await Promise.all(allMediaUrls.map(url => deleteCloudinaryMedia(url)));
+          toast.info(`Deleting ${allMediaUrls.length} associated media files...`);
+          await Promise.all(allMediaUrls.map(url => deleteMedia(url)));
         }
 
-        await deleteDoc(doc(db, 'properties', property.id));
-        toast.success("Property deleted completely.");
+        const { error } = await supabase.from('properties').delete().eq('id', property.id);
+        if (error) throw error;
+        toast.success('Property deleted completely.');
       } catch (error) {
-        toast.error("Failed to delete property");
+        toast.error('Failed to delete property');
       }
     }
   };

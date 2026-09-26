@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { Save, Loader2, MessageCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
@@ -21,14 +20,15 @@ export default function SiteSettings() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const docRef = doc(db, 'settings', 'site');
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          setFormData(prev => ({ ...prev, ...snap.data() }));
-        }
+        const { data } = await supabase
+          .from('settings')
+          .select('value')
+          .eq('key', 'site')
+          .single();
+        if (data?.value) setFormData(prev => ({ ...prev, ...data.value }));
       } catch (err) {
         console.error(err);
-        toast.error("Failed to load site settings.");
+        toast.error('Failed to load site settings.');
       } finally {
         setLoading(false);
       }
@@ -50,15 +50,19 @@ export default function SiteSettings() {
     
     setSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'site'), {
-        ...formData,
-        lastUpdatedAt: serverTimestamp(),
-        lastUpdatedBy: userProfile?.uid
-      }, { merge: true });
-      toast.success("Site settings updated successfully.");
+      const { error } = await supabase.from('settings').upsert({
+        key: 'site',
+        value: {
+          ...formData,
+          lastUpdatedAt: new Date().toISOString(),
+          lastUpdatedBy: userProfile?.uid
+        }
+      });
+      if (error) throw error;
+      toast.success('Site settings updated successfully.');
     } catch (err) {
       console.error(err);
-      toast.error("Failed to update site settings.");
+      toast.error('Failed to update site settings.');
     } finally {
       setSaving(false);
     }

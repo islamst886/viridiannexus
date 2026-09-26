@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { doc, getDoc, collection, updateDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { X, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useGlobalState } from '../../context/GlobalState';
@@ -29,12 +28,11 @@ export default function ChangeParkingModal({ isOpen, onClose, booking, onComplet
       setSpotsToRelease([]);
       setSpotsToClaim([]);
       
-      getDoc(doc(db, 'properties', booking.propertyId)).then(snap => {
-        if (snap.exists()) {
-          const pData = snap.data();
+      supabase.from('properties').select('*').eq('id', booking.propertyId).single().then(({ data: pData }) => {
+        if (pData) {
           setProperty(pData);
           
-          const allSpots = pData.parkingInventory || [];
+          const allSpots = pData.parking_inventory || [];
           setAvailableSpots(allSpots.filter(s => s.status === 'Available'));
           
           const assigned = allSpots.filter(s => (booking.parkingSpotIds || []).includes(s.id));
@@ -74,65 +72,58 @@ export default function ChangeParkingModal({ isOpen, onClose, booking, onComplet
 
     setSubmitting(true);
     try {
-      await runTransaction(db, async (txn) => {
-        const propRef = doc(db, 'properties', booking.propertyId);
-        const propSnap = await txn.get(propRef);
-        
-        if (!propSnap.exists()) throw new Error("Property not found.");
-        
-        const pData = propSnap.data();
-        const parkingInv = [...(pData.parkingInventory || [])];
-        
-        const releasedLabels = [];
-        const claimedLabels = [];
+      const { data: propData } = await supabase.from('properties').select('*').eq('id', booking.propertyId).single();
+      if (!propData) throw new Error("Property not found.");
+      
+      const parkingInv = [...(propData.parking_inventory || [])];
+      
+      const releasedLabels = [];
+      const claimedLabels = [];
 
-        // 1. Release old spots
-        for (const spotId of spotsToRelease) {
-          const spotIdx = parkingInv.findIndex(s => s.id === spotId);
-          if (spotIdx !== -1) {
-            parkingInv[spotIdx].status = 'Available';
-            parkingInv[spotIdx].assignedBookingId = null;
-            releasedLabels.push(parkingInv[spotIdx].label);
-          }
+      // 1. Release old spots
+      for (const spotId of spotsToRelease) {
+        const spotIdx = parkingInv.findIndex(s => s.id === spotId);
+        if (spotIdx !== -1) {
+          parkingInv[spotIdx].status = 'Available';
+          parkingInv[spotIdx].assignedBookingId = null;
+          releasedLabels.push(parkingInv[spotIdx].label);
         }
+      }
 
-        // 2. Claim new spots
-        for (const spotId of spotsToClaim) {
-          const spotIdx = parkingInv.findIndex(s => s.id === spotId);
-          if (spotIdx === -1) throw new Error(`Spot ${spotId} no longer exists.`);
-          if (parkingInv[spotIdx].status !== 'Available') {
-            throw new Error(`Spot ${parkingInv[spotIdx].label} is no longer available.`);
-          }
-          parkingInv[spotIdx].status = 'Assigned';
-          parkingInv[spotIdx].assignedBookingId = booking.id;
-          claimedLabels.push(parkingInv[spotIdx].label);
+      // 2. Claim new spots
+      for (const spotId of spotsToClaim) {
+        const spotIdx = parkingInv.findIndex(s => s.id === spotId);
+        if (spotIdx === -1) throw new Error(`Spot ${spotId} no longer exists.`);
+        if (parkingInv[spotIdx].status !== 'Available') {
+          throw new Error(`Spot ${parkingInv[spotIdx].label} is no longer available.`);
         }
-        
-        txn.update(propRef, { parkingInventory: parkingInv, lastUpdatedAt: serverTimestamp() });
-        
-        // 3. Update Booking Document
-        const currentSpotIds = booking.parkingSpotIds || [];
-        // Remove released, add claimed
-        const finalSpotIds = [...currentSpotIds.filter(id => !spotsToRelease.includes(id)), ...spotsToClaim];
-        
-        const allSpotsObj = parkingInv.filter(s => finalSpotIds.includes(s.id));
-        const parkingDisplayStr = allSpotsObj.map(s => `${s.label}${s.level ? ` (${s.level})` : ''}`).join(', ') || null;
+        parkingInv[spotIdx].status = 'Assigned';
+        parkingInv[spotIdx].assignedBookingId = booking.id;
+        claimedLabels.push(parkingInv[spotIdx].label);
+      }
+      
+      await supabase.from('properties').update({ parking_inventory: parkingInv }).eq('id', booking.propertyId);
+      
+      // 3. Update Booking Document
+      const currentSpotIds = booking.parkingSpotIds || [];
+      // Remove released, add claimed
+      const finalSpotIds = [...currentSpotIds.filter(id => !spotsToRelease.includes(id)), ...spotsToClaim];
+      
+      const allSpotsObj = parkingInv.filter(s => finalSpotIds.includes(s.id));
+      const parkingDisplayStr = allSpotsObj.map(s => `${s.label}${s.level ? ` (${s.level})` : ''}`).join(', ') || null;
 
-        txn.update(doc(db, 'bookings', booking.id), {
-          parkingSpotIds: finalSpotIds,
-          parkingIncluded: parkingDisplayStr,
-          lastUpdatedAt: serverTimestamp(),
-          lastUpdatedBy: adminUid
-        });
-        
-        // 4. Activity Log
-        const logRef = doc(collection(db, `bookings/${booking.id}/activityLog`));
-        txn.set(logRef, {
-          action: 'Parking Swapped',
-          detail: `Exchanged spots: Given up [${releasedLabels.join(', ')}], Claimed [${claimedLabels.join(', ')}]. No price adjustment required. Reason: ${notes}`,
-          performedBy: adminName,
-          performedAt: serverTimestamp()
-        });
+      await supabase.from('bookings').update({
+        parking_spot_ids: finalSpotIds,
+        parking_included: parkingDisplayStr,
+        last_updated_by: adminUid
+      }).eq('id', booking.id);
+      
+      // 4. Activity Log
+      await supabase.from('booking_activity_log').insert({
+        booking_id: booking.id,
+        action: 'Parking Swapped',
+        detail: `Exchanged spots: Given up [${releasedLabels.join(', ')}], Claimed [${claimedLabels.join(', ')}]. No price adjustment required. Reason: ${notes}`,
+        performed_by: adminName
       });
 
       toast.success('Parking spots successfully swapped.');

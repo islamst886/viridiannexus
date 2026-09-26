@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { doc, getDoc, collection, updateDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { X, Loader2, PlusCircle, DollarSign } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useGlobalState } from '../../context/GlobalState';
@@ -32,12 +31,15 @@ export default function AddParkingModal({ isOpen, onClose, booking, onComplete }
       defaultDate.setDate(defaultDate.getDate() + 14);
       setInvoiceDueDate(defaultDate.toISOString().split('T')[0]);
       
-      getDoc(doc(db, 'properties', booking.propertyId)).then(snap => {
-        if (snap.exists()) {
-          const pData = snap.data();
-          setProperty(pData);
+      supabase.from('properties').select('*').eq('id', booking.propertyId).single().then(({ data: pData }) => {
+        if (pData) {
+          setProperty({
+            id: pData.id,
+            parkingPrice: pData.parking_price,
+            parkingInventory: pData.parking_inventory
+          });
           
-          const spots = pData.parkingInventory || [];
+          const spots = pData.parking_inventory || [];
           setAvailableSpots(spots.filter(s => s.status === 'Available'));
         }
         setLoading(false);
@@ -76,81 +78,70 @@ export default function AddParkingModal({ isOpen, onClose, booking, onComplete }
 
     setSubmitting(true);
     try {
-      await runTransaction(db, async (txn) => {
-        // 1. Claim spots in Property document
-        const propRef = doc(db, 'properties', booking.propertyId);
-        const propSnap = await txn.get(propRef);
-        
-        if (!propSnap.exists()) throw new Error("Property not found.");
-        
-        const pData = propSnap.data();
-        const parkingInv = [...(pData.parkingInventory || [])];
-        const newlyAssigned = [];
-        
-        for (const spotId of selectedSpots) {
-          const spotIdx = parkingInv.findIndex(s => s.id === spotId);
-          if (spotIdx === -1) throw new Error(`Spot ${spotId} no longer exists.`);
-          if (parkingInv[spotIdx].status !== 'Available') {
-            throw new Error(`Spot ${parkingInv[spotIdx].label} was just taken by someone else.`);
-          }
-          
-          parkingInv[spotIdx].status = 'Assigned';
-          parkingInv[spotIdx].assignedBookingId = booking.id;
-          newlyAssigned.push(parkingInv[spotIdx]);
+      const { data: propData } = await supabase.from('properties').select('*').eq('id', booking.propertyId).single();
+      if (!propData) throw new Error("Property not found.");
+      
+      const parkingInv = [...(propData.parking_inventory || [])];
+      const newlyAssigned = [];
+      
+      for (const spotId of selectedSpots) {
+        const spotIdx = parkingInv.findIndex(s => s.id === spotId);
+        if (spotIdx === -1) throw new Error(`Spot ${spotId} no longer exists.`);
+        if (parkingInv[spotIdx].status !== 'Available') {
+          throw new Error(`Spot ${parkingInv[spotIdx].label} was just taken by someone else.`);
         }
         
-        txn.update(propRef, { parkingInventory: parkingInv, lastUpdatedAt: serverTimestamp() });
-        
-        // 2. Update Booking Document
-        const addAmount = Number(additionAmount) || 0;
-        const newTotalPrice = (booking.totalPrice || 0) + addAmount;
-        const newBalanceDue = (booking.balanceDue || 0) + addAmount;
+        parkingInv[spotIdx].status = 'Assigned';
+        parkingInv[spotIdx].assignedBookingId = booking.id;
+        newlyAssigned.push(parkingInv[spotIdx]);
+      }
+      
+      await supabase.from('properties').update({ parking_inventory: parkingInv }).eq('id', booking.propertyId);
+      
+      // 2. Update Booking Document
+      const addAmount = Number(additionAmount) || 0;
+      const newTotalPrice = (booking.totalPrice || 0) + addAmount;
+      const newBalanceDue = (booking.balanceDue || 0) + addAmount;
 
-        const currentSpotIds = booking.parkingSpotIds || [];
-        const combinedSpotIds = [...currentSpotIds, ...selectedSpots];
-        
-        // Rebuild display string from all spots (old + new)
-        const allSpotsObj = parkingInv.filter(s => combinedSpotIds.includes(s.id));
-        const parkingDisplayStr = allSpotsObj.map(s => `${s.label}${s.level ? ` (${s.level})` : ''}`).join(', ') || null;
+      const currentSpotIds = booking.parkingSpotIds || [];
+      const combinedSpotIds = [...currentSpotIds, ...selectedSpots];
+      
+      // Rebuild display string from all spots (old + new)
+      const allSpotsObj = parkingInv.filter(s => combinedSpotIds.includes(s.id));
+      const parkingDisplayStr = allSpotsObj.map(s => `${s.label}${s.level ? ` (${s.level})` : ''}`).join(', ') || null;
 
-        txn.update(doc(db, 'bookings', booking.id), {
-          parkingSpotIds: combinedSpotIds,
-          parkingIncluded: parkingDisplayStr,
-          totalPrice: newTotalPrice,
-          balanceDue: newBalanceDue,
-          lastUpdatedAt: serverTimestamp(),
-          lastUpdatedBy: adminUid
-        });
-        
-        // 3. Activity Log
-        const addedLabels = newlyAssigned.map(s => s.label).join(', ');
-        const logRef = doc(collection(db, `bookings/${booking.id}/activityLog`));
-        txn.set(logRef, {
-          action: 'Parking Added & Price Adjusted',
-          detail: `Added parking spots: [${addedLabels}]. Total price increased by ৳${addAmount.toLocaleString('en-IN')}. Reason: ${notes}`,
-          performedBy: adminName,
-          performedAt: serverTimestamp()
-        });
-
-        // 4. Adjust Ledger (Create a debit note/invoice)
-        if (adjustLedger && addAmount > 0) {
-          const ledgerRef = doc(collection(db, `bookings/${booking.id}/payments`));
-          txn.set(ledgerRef, {
-            type: 'Add-on Invoice (Parking)',
-            installmentNumber: null,
-            scheduledDate: invoiceDueDate ? new Date(invoiceDueDate) : new Date(),
-            paidDate: null,
-            scheduledAmount: addAmount,
-            receivedAmount: 0,
-            paymentMode: '',
-            referenceNumber: 'PARKING-ADDON',
-            status: 'Scheduled',
-            note: 'Invoice for adding parking mid-booking.',
-            recordedBy: adminUid,
-            recordedAt: serverTimestamp()
-          });
-        }
+      await supabase.from('bookings').update({
+        parking_spot_ids: combinedSpotIds,
+        parking_included: parkingDisplayStr,
+        total_price: newTotalPrice,
+        balance_due: newBalanceDue,
+        last_updated_by: adminUid
+      }).eq('id', booking.id);
+      
+      // 3. Activity Log
+      const addedLabels = newlyAssigned.map(s => s.label).join(', ');
+      await supabase.from('booking_activity_log').insert({
+        booking_id: booking.id,
+        action: 'Parking Added & Price Adjusted',
+        detail: `Added parking spots: [${addedLabels}]. Total price increased by ৳${addAmount.toLocaleString('en-IN')}. Reason: ${notes}`,
+        performed_by: adminName
       });
+
+      // 4. Adjust Ledger (Create a debit note/invoice)
+      if (adjustLedger && addAmount > 0) {
+        await supabase.from('booking_payments').insert({
+          booking_id: booking.id,
+          type: 'Add-on Invoice (Parking)',
+          scheduled_date: (invoiceDueDate ? new Date(invoiceDueDate) : new Date()).toISOString(),
+          scheduled_amount: addAmount,
+          received_amount: 0,
+          payment_mode: '',
+          reference_number: 'PARKING-ADDON',
+          status: 'Scheduled',
+          note: 'Invoice for adding parking mid-booking.',
+          recorded_by: adminUid
+        });
+      }
 
       toast.success('Parking spots successfully added to booking.');
       onComplete();

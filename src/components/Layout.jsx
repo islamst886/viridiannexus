@@ -4,8 +4,7 @@ import { useState } from 'react';
 import { cn } from '../lib/utils';
 import { useGlobalState } from '../context/GlobalState';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../supabase';
 import { toast } from 'react-toastify';
 import { Loader2 } from 'lucide-react';
 import FloatingWhatsApp from './FloatingWhatsApp';
@@ -30,11 +29,12 @@ export default function Layout() {
 
     setIsSubscribing(true);
     try {
-      await addDoc(collection(db, 'newsletter_subscribers'), {
+      const { error } = await supabase.from('newsletter_subscribers').insert({
         email,
-        subscribedAt: serverTimestamp(),
+        subscribed_at: new Date().toISOString(),
         status: 'active'
       });
+      if (error) throw error;
 
       toast.success("Welcome to Viridian Nexus Development Ltd. Exclusive Updates.");
       setEmail('');

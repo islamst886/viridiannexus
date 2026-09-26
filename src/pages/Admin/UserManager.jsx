@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import AdminSidebar from '../../components/AdminSidebar';
 import { useGlobalState } from '../../context/GlobalState';
 import { Loader2, Search, Shield, ShieldAlert, UserX, UserCheck, Settings } from 'lucide-react';
@@ -17,47 +16,56 @@ export default function UserManager() {
   const [newRole, setNewRole] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const fetchUsers = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      setUsers(data || []);
       setLoading(false);
-    });
-    return () => unsub();
+    };
+    fetchUsers();
+
+    const sub = supabase
+      .channel('users_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchUsers)
+      .subscribe();
+    return () => supabase.removeChannel(sub);
   }, []);
 
   const handleToggleBan = async (user) => {
     if (user.role === 'super_admin') {
-      toast.error("Cannot ban a super admin.");
+      toast.error('Cannot ban a super admin.');
       return;
     }
-    const newStatus = !user.isBanned;
+    const newStatus = !user.is_banned;
     try {
-      await updateDoc(doc(db, 'users', user.id), {
-        isBanned: newStatus,
-        lastUpdatedAt: serverTimestamp(),
-        lastUpdatedBy: userProfile.uid
-      });
+      const { error } = await supabase.from('profiles').update({
+        is_banned: newStatus,
+        updated_at: new Date().toISOString()
+      }).eq('id', user.id);
+      if (error) throw error;
       toast.success(newStatus ? 'User banned successfully' : 'User unbanned successfully');
     } catch (err) {
       console.error(err);
-      toast.error("Failed to update user status");
+      toast.error('Failed to update user status');
     }
   };
 
   const handleRoleChange = async () => {
     if (!selectedUser || !newRole) return;
     try {
-      await updateDoc(doc(db, 'users', selectedUser.id), {
+      const { error } = await supabase.from('profiles').update({
         role: newRole,
-        lastUpdatedAt: serverTimestamp(),
-        lastUpdatedBy: userProfile.uid
-      });
+        updated_at: new Date().toISOString()
+      }).eq('id', selectedUser.id);
+      if (error) throw error;
       toast.success('User role updated successfully');
       setIsModalOpen(false);
       setSelectedUser(null);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to update user role");
+      toast.error('Failed to update user role');
     }
   };
 
@@ -71,8 +79,8 @@ export default function UserManager() {
     setIsModalOpen(true);
   };
 
-  const filteredUsers = users.filter(u => 
-    u.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredUsers = users.filter(u =>
+    u.display_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.phone?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -130,18 +138,18 @@ export default function UserManager() {
                 <tbody className="divide-y divide-gray-100 text-sm">
                   {filteredUsers.map((u) => {
                     const isSelf = u.id === userProfile?.uid;
-                    const isSuperAdmin = u.role === 'super_admin';
+                    const isSuperAdminUser = u.role === 'super_admin';
                     
                     return (
                       <tr key={u.id} className="hover:bg-gray-50">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-brand-primary/10 text-brand-primary flex items-center justify-center font-bold">
-                              {u.displayName?.charAt(0) || 'U'}
+                              {u.display_name?.charAt(0) || 'U'}
                             </div>
                             <div>
                               <div className="font-semibold text-gray-900 flex items-center gap-2">
-                                {u.displayName}
+                                {u.display_name}
                                 {isSelf && <span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full">You</span>}
                               </div>
                               <div className="text-gray-500 text-xs">{u.email}</div>
@@ -150,7 +158,7 @@ export default function UserManager() {
                           </div>
                         </td>
                         <td className="p-4">
-                          {isSuperAdmin ? (
+                          {isSuperAdminUser ? (
                             <span className="flex items-center gap-1 text-purple-700 bg-purple-50 px-2 py-1 rounded font-bold text-xs w-max">
                               <ShieldAlert size={14} /> Super Admin
                             </span>
@@ -165,18 +173,18 @@ export default function UserManager() {
                           )}
                         </td>
                         <td className="p-4">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${u.isBanned ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                            {u.isBanned ? 'Banned' : 'Active'}
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${u.is_banned ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                            {u.is_banned ? 'Banned' : 'Active'}
                           </span>
                         </td>
                         <td className="p-4 text-gray-500">
-                          {u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : 'N/A'}
+                          {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}
                         </td>
                         <td className="p-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button 
                               onClick={() => openRoleModal(u)}
-                              disabled={isSuperAdmin || isSelf}
+                              disabled={isSuperAdminUser || isSelf}
                               className="p-2 text-gray-400 hover:text-brand-primary hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
                               title="Change Role"
                             >
@@ -184,11 +192,11 @@ export default function UserManager() {
                             </button>
                             <button 
                               onClick={() => handleToggleBan(u)}
-                              disabled={isSuperAdmin || isSelf}
-                              className={`p-2 rounded transition-colors disabled:opacity-30 ${u.isBanned ? 'text-green-600 hover:bg-green-50' : 'text-red-600 hover:bg-red-50'}`}
-                              title={u.isBanned ? 'Unban User' : 'Ban User'}
+                              disabled={isSuperAdminUser || isSelf}
+                              className={`p-2 rounded transition-colors disabled:opacity-30 ${u.is_banned ? 'text-green-600 hover:bg-green-50' : 'text-red-600 hover:bg-red-50'}`}
+                              title={u.is_banned ? 'Unban User' : 'Ban User'}
                             >
-                              {u.isBanned ? <UserCheck size={20} /> : <UserX size={20} />}
+                              {u.is_banned ? <UserCheck size={20} /> : <UserX size={20} />}
                             </button>
                           </div>
                         </td>

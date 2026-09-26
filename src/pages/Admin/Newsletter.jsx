@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { collection, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { Trash2, Users } from 'lucide-react';
 import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
@@ -15,12 +14,14 @@ export default function AdminNewsletter() {
 
   const fetchSubscribers = async () => {
     try {
-      const q = query(collection(db, 'newsletter_subscribers'), orderBy('subscribedAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setSubscribers(data);
+      const { data, error } = await supabase
+        .from('newsletter_subscribers')
+        .select('*')
+        .order('subscribed_at', { ascending: false });
+      if (error) throw error;
+      setSubscribers(data || []);
     } catch (error) {
-      toast.error("Failed to fetch subscribers");
+      toast.error('Failed to fetch subscribers');
       console.error(error);
     } finally {
       setLoading(false);
@@ -28,13 +29,14 @@ export default function AdminNewsletter() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to remove this subscriber?")) {
+    if (window.confirm('Are you sure you want to remove this subscriber?')) {
       try {
-        await deleteDoc(doc(db, 'newsletter_subscribers', id));
+        const { error } = await supabase.from('newsletter_subscribers').delete().eq('id', id);
+        if (error) throw error;
         setSubscribers(prev => prev.filter(sub => sub.id !== id));
-        toast.success("Subscriber removed");
+        toast.success('Subscriber removed');
       } catch (error) {
-        toast.error("Failed to remove subscriber");
+        toast.error('Failed to remove subscriber');
       }
     }
   };
@@ -75,7 +77,7 @@ export default function AdminNewsletter() {
                       {sub.email}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {sub.subscribedAt?.seconds ? new Date(sub.subscribedAt.seconds * 1000).toLocaleDateString() : 'Unknown Date'}
+                      {sub.subscribed_at ? new Date(sub.subscribed_at).toLocaleDateString() : 'Unknown Date'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">

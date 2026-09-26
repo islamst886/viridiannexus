@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { doc, getDoc, collection, updateDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { X, Loader2, AlertTriangle, DollarSign } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useGlobalState } from '../../context/GlobalState';
@@ -21,11 +20,14 @@ export default function ReleaseParkingModal({ isOpen, onClose, booking, onComple
     if (isOpen && booking) {
       setLoading(true);
       setNotes('Client opted out of parking.');
-      getDoc(doc(db, 'properties', booking.propertyId)).then(snap => {
-        if (snap.exists()) {
-          const pData = snap.data();
-          setProperty(pData);
-          const pPrice = Number(pData.parkingPrice) || 0;
+      supabase.from('properties').select('*').eq('id', booking.propertyId).single().then(({ data: pData }) => {
+        if (pData) {
+          setProperty({
+            id: pData.id,
+            parkingPrice: pData.parking_price,
+            parkingInventory: pData.parking_inventory
+          });
+          const pPrice = Number(pData.parking_price) || 0;
           const numSpots = (booking.parkingSpotIds || []).length;
           setDeductionAmount(pPrice * numSpots);
         }
@@ -49,68 +51,59 @@ export default function ReleaseParkingModal({ isOpen, onClose, booking, onComple
 
     setSubmitting(true);
     try {
-      await runTransaction(db, async (txn) => {
-        // 1. Release spots in Property document
-        const propRef = doc(db, 'properties', booking.propertyId);
-        const propSnap = await txn.get(propRef);
+      const { data: propData } = await supabase.from('properties').select('*').eq('id', booking.propertyId).single();
+      
+      if (propData) {
+        const parkingInv = [...(propData.parking_inventory || [])];
         
-        if (propSnap.exists()) {
-          const pData = propSnap.data();
-          const parkingInv = [...(pData.parkingInventory || [])];
-          
-          for (const spotId of booking.parkingSpotIds) {
-            const spotIdx = parkingInv.findIndex(s => s.id === spotId);
-            if (spotIdx !== -1) {
-              parkingInv[spotIdx].status = 'Available';
-              parkingInv[spotIdx].assignedBookingId = null;
-            }
+        for (const spotId of booking.parkingSpotIds) {
+          const spotIdx = parkingInv.findIndex(s => s.id === spotId);
+          if (spotIdx !== -1) {
+            parkingInv[spotIdx].status = 'Available';
+            parkingInv[spotIdx].assignedBookingId = null;
           }
-          
-          txn.update(propRef, { parkingInventory: parkingInv, lastUpdatedAt: serverTimestamp() });
         }
         
-        // 2. Update Booking Document
-        const deduct = Number(deductionAmount) || 0;
-        const newTotalPrice = Math.max(0, (booking.totalPrice || 0) - deduct);
-        const newBalanceDue = Math.max(0, (booking.balanceDue || 0) - deduct);
+        await supabase.from('properties').update({ parking_inventory: parkingInv }).eq('id', booking.propertyId);
+      }
+      
+      // 2. Update Booking Document
+      const deduct = Number(deductionAmount) || 0;
+      const newTotalPrice = Math.max(0, (booking.totalPrice || 0) - deduct);
+      const newBalanceDue = Math.max(0, (booking.balanceDue || 0) - deduct);
 
-        txn.update(doc(db, 'bookings', booking.id), {
-          parkingSpotIds: [],
-          parkingIncluded: null,
-          totalPrice: newTotalPrice,
-          balanceDue: newBalanceDue,
-          lastUpdatedAt: serverTimestamp(),
-          lastUpdatedBy: adminUid
-        });
-        
-        // 3. Activity Log
-        const logRef = doc(collection(db, `bookings/${booking.id}/activityLog`));
-        txn.set(logRef, {
-          action: 'Parking Released & Price Adjusted',
-          detail: `Parking spots [${(booking.parkingSpotIds || []).join(', ')}] released. Total price reduced by ৳${deduct.toLocaleString('en-IN')}. Reason: ${notes}`,
-          performedBy: adminName,
-          performedAt: serverTimestamp()
-        });
-
-        // 4. Adjust Ledger (Create a credit note)
-        if (adjustLedger && deduct > 0) {
-          const ledgerRef = doc(collection(db, `bookings/${booking.id}/payments`));
-          txn.set(ledgerRef, {
-            type: 'Credit Note (Parking Removed)',
-            installmentNumber: null,
-            scheduledDate: new Date(),
-            paidDate: new Date(),
-            scheduledAmount: -deduct,
-            receivedAmount: -deduct,
-            paymentMode: 'System',
-            referenceNumber: 'PARKING-RELEASE',
-            status: 'Paid',
-            note: 'Automatic deduction for releasing parking spots.',
-            recordedBy: adminUid,
-            recordedAt: serverTimestamp()
-          });
-        }
+      await supabase.from('bookings').update({
+        parking_spot_ids: [],
+        parking_included: null,
+        total_price: newTotalPrice,
+        balance_due: newBalanceDue,
+        last_updated_by: adminUid
+      }).eq('id', booking.id);
+      
+      // 3. Activity Log
+      await supabase.from('booking_activity_log').insert({
+        booking_id: booking.id,
+        action: 'Parking Released & Price Adjusted',
+        detail: `Parking spots [${(booking.parkingSpotIds || []).join(', ')}] released. Total price reduced by ৳${deduct.toLocaleString('en-IN')}. Reason: ${notes}`,
+        performed_by: adminName
       });
+
+      // 4. Adjust Ledger (Create a credit note)
+      if (adjustLedger && deduct > 0) {
+        await supabase.from('booking_payments').insert({
+          booking_id: booking.id,
+          type: 'Credit Note (Parking Removed)',
+          scheduled_date: new Date().toISOString(),
+          paid_date: new Date().toISOString(),
+          scheduled_amount: -deduct,
+          received_amount: -deduct,
+          payment_mode: 'System',
+          reference_number: 'PARKING-RELEASE',
+          status: 'Paid',
+          note: 'Automatic deduction for releasing parking spots.',
+          recorded_by: adminUid
+        });
+      }
 
       toast.success('Parking spots released and pricing updated successfully.');
       onComplete();

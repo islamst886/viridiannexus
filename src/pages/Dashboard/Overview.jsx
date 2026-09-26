@@ -1,43 +1,55 @@
 import React, { useState, useEffect } from 'react';
 import { useGlobalState } from '../../context/GlobalState';
-import { db, auth } from '../../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { supabase } from '../../supabase';
+import { mapBookingFromDB } from '../../utils/mappers';
 import { Building, Loader2, ChevronRight, CheckCircle, Clock, Edit3, MapPin, CreditCard, Copy, Check, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EditProfileModal from './EditProfileModal';
 import { toast } from 'react-toastify';
 
 export default function Overview() {
-  const { userProfile } = useGlobalState();
+  const { userProfile, authUser } = useGlobalState();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const navigate = useNavigate();
 
-  const currentUser = auth.currentUser;
 
   useEffect(() => {
     if (!userProfile?.uid) {
       setLoading(false);
       return;
     }
-    
-    const q = query(collection(db, 'bookings'), where('linkedUserId', '==', userProfile.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
 
-    return () => unsub();
-  }, [userProfile]);
+    const fetchBookings = async () => {
+      const { data } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('linked_user_id', userProfile.uid)
+        .order('created_at', { ascending: false });
+      setBookings((data || []).map(mapBookingFromDB));
+      setLoading(false);
+    };
+    fetchBookings();
+
+    const sub = supabase
+      .channel(`user_bookings:${userProfile.uid}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'bookings',
+        filter: `linked_user_id=eq.${userProfile.uid}`
+      }, fetchBookings)
+      .subscribe();
+
+    return () => supabase.removeChannel(sub);
+  }, [userProfile?.uid]);
 
   const formatMoney = (amount) => {
     if (amount === undefined || amount === null) return '৳0';
     return '৳ ' + Math.round(Number(amount)).toLocaleString('en-IN');
   };
 
-  const memberSince = userProfile?.createdAt?.toDate
-    ? userProfile.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  const memberSince = userProfile?.createdAt
+    ? new Date(userProfile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : null;
 
   return (
@@ -59,7 +71,7 @@ export default function Overview() {
                   />
                 ) : (
                   <div className="w-20 h-20 rounded-2xl bg-brand-primary/10 text-brand-primary border-2 border-brand-primary/20 flex items-center justify-center text-3xl font-bold uppercase shadow-sm">
-                    {userProfile?.displayName?.charAt(0) || currentUser?.email?.charAt(0) || 'U'}
+                    {userProfile?.displayName?.charAt(0) || authUser?.email?.charAt(0) || 'U'}
                   </div>
                 )}
               </div>
@@ -67,16 +79,16 @@ export default function Overview() {
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-2xl font-bold text-gray-900 truncate">
-                    {userProfile?.displayName || currentUser?.displayName || 'User'}
+                    {userProfile?.displayName || authUser?.displayName || 'User'}
                   </h2>
-                  {currentUser?.emailVerified && (
+                  {authUser?.emailVerified && (
                     <span className="flex items-center gap-1 text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
                       <ShieldCheck size={12} /> Verified
                     </span>
                   )}
                 </div>
 
-                <p className="text-gray-500 text-sm mt-0.5">{userProfile?.email || currentUser?.email}</p>
+                <p className="text-gray-500 text-sm mt-0.5">{userProfile?.email || authUser?.email}</p>
                 {userProfile?.phone && (
                   <p className="text-gray-600 text-sm font-medium mt-1">
                     📞 {userProfile.phone}

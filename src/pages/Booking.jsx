@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../supabase';
 import { CheckCircle, ChevronRight, Loader2, Building2, User, CreditCard } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useGlobalState } from '../context/GlobalState';
@@ -60,7 +59,7 @@ const secondaryBtn = {
 };
 
 export default function Booking() {
-  const { userProfile } = useGlobalState();
+  const { userProfile, authUser, properties, loadingProperties } = useGlobalState();
   const [step, setStep] = useState(1);
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -82,19 +81,17 @@ export default function Booking() {
   });
   const [errors, setErrors] = useState({});
 
-  // Fetch projects from Firestore
+  // Use properties from GlobalState (already fetched and cached)
   useEffect(() => {
-    getDocs(collection(db, 'properties'))
-      .then(snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setProjects(data);
-        if (data.length > 0) setSelectedProject(data[0].id);
-      })
-      .catch(console.error)
-      .finally(() => setLoadingProjects(false));
-  }, []);
+    if (!loadingProperties && properties.length > 0) {
+      setLoadingProjects(false);
+      if (!selectedProject) setSelectedProject(properties[0].id);
+    } else if (!loadingProperties) {
+      setLoadingProjects(false);
+    }
+  }, [properties, loadingProperties]);
 
-  const currentProject = projects.find(p => p.id === selectedProject);
+  const currentProject = properties.find(p => p.id === selectedProject);
 
   // Get unit options from the selected project
   const unitOptions = currentProject?.availableUnits?.length
@@ -140,22 +137,19 @@ export default function Booking() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const ref = await addDoc(collection(db, 'bookingRequests'), {
-        projectId: selectedProject,
-        projectName: currentProject?.name || 'N/A',
-        unitType: selectedUnit,
-        parkingRequested: Number(form.parkingRequested),
-        parkingPrice: currentProject?.parkingPrice || 0,
-        clientName: `${form.firstName} ${form.lastName}`,
-        clientEmail: form.email,
-        clientPhone: form.phone,
-        clientNid: form.nid,
-        clientAddress: form.address,
-        linkedUserId: userProfile?.uid || null,
+      const { data: newRequest, error } = await supabase.from('booking_requests').insert({
+        property_id: selectedProject,
+        property_name: currentProject?.name || 'N/A',
+        unit_type: selectedUnit,
+        client_name: `${form.firstName} ${form.lastName}`,
+        client_email: form.email,
+        client_phone: form.phone,
+        linked_user_id: authUser?.id || null,
+        message: `NID: ${form.nid} | Address: ${form.address} | Parking: ${form.parkingRequested}`,
         status: 'Pending Review',
-        createdAt: serverTimestamp(),
-      });
-      setBookingRef(ref.id.slice(0, 8).toUpperCase());
+      }).select().single();
+      if (error) throw error;
+      setBookingRef(newRequest.id.slice(0, 8).toUpperCase());
       setSubmitted(true);
     } catch (err) {
       console.error(err);

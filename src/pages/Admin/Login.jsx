@@ -1,27 +1,23 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../firebase';
+import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ShieldCheck } from 'lucide-react';
 
 export default function AdminLogin() {
+  const { signIn, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signIn(email, password);
       toast.success('Admin login successful!');
       navigate('/admin/dashboard');
     } catch (error) {
-      toast.error('Invalid admin credentials.');
-    } finally {
-      setLoading(false);
+      // Error already toasted by signIn
     }
   };
 

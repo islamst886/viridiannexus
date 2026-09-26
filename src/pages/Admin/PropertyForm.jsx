@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db, storage } from '../../firebase';
-import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { supabase } from '../../supabase';
+import { uploadMedia, deleteMedia, deleteMediaBeacon } from '../../utils/supabaseStorage';
+import { mapPropertyToDB } from '../../utils/mappers';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ArrowLeft, Save, CheckSquare, Plus, Trash2, FileText, Tag, X, ChevronDown, AlertTriangle } from 'lucide-react';
 import { usePropertyTypes } from '../../hooks/usePropertyTypes';
 import { useGlobalState } from '../../context/GlobalState';
 import { AVAILABLE_ICONS } from '../../utils/iconLibrary';
-import { deleteCloudinaryMedia, deleteCloudinaryMediaBeacon } from '../../utils/cloudinary';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -131,7 +130,7 @@ export default function PropertyForm() {
     return () => {
       // If component unmounts and we didn't save, delete newly uploaded media to prevent orphans
       if (!bypassRef.current && newlyUploadedRef.current.length > 0) {
-        newlyUploadedRef.current.forEach(url => deleteCloudinaryMediaBeacon(url));
+        newlyUploadedRef.current.forEach(url => deleteMediaBeacon(url));
       }
     };
   }, []);
@@ -148,48 +147,53 @@ export default function PropertyForm() {
   }, [id]);
   const fetchProperty = async () => {
     try {
-      const docRef = doc(db, 'properties', id);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setFormData({ 
-          id: docSnap.id, 
-          ...data, 
-          amenities: data.amenities || [],
-          customAmenities: data.customAmenities || [],
-          availableUnits: data.availableUnits || [],
-          inventory: data.inventory || [],
-          parkingInventory: data.parkingInventory || [],
-          propertyType: Array.isArray(data.propertyType) ? data.propertyType : (data.propertyType ? [data.propertyType] : []),
-          buildingType: data.buildingType || '',
-          unitsPerFloor: data.unitsPerFloor || '',
-          totalUnits: data.totalUnits || '',
-          landArea: data.landArea || '',
-          architect: data.architect || '',
-          parkingAvailable: data.parkingAvailable || '',
-          parkingPrice: data.parkingPrice || '',
-          passengerLifts: data.passengerLifts || '',
-          frontRoadSize: data.frontRoadSize || '',
-          totalShare: data.totalShare || '',
-          landmarks: data.landmarks || '',
-          googleMapLink: data.googleMapLink || '',
-          completionDate: data.completionDate || '',
-          overview: data.overview || '',
-          brochureUrl: data.brochureUrl || '',
-          images: {
-            hero: data.images?.hero || '',
-            map: data.images?.map || '',
-            floorPlan: data.images?.floorPlan || '',
-            video: data.images?.video || '',
-            gallery: data.images?.gallery || [],
-          }
-        });
-      } else {
-        toast.error("Property not found");
+      const { data, error } = await supabase.from('properties').select('*').eq('id', id).single();
+      if (error || !data) {
+        toast.error('Property not found');
         navigate('/admin/dashboard');
+        return;
       }
+      setFormData({
+        id: data.id,
+        name: data.name || '',
+        location: data.location || '',
+        price: data.price || '',
+        status: data.status || 'Active',
+        propertyType: Array.isArray(data.property_type) ? data.property_type : (data.property_type ? [data.property_type] : []),
+        beds: data.beds || '',
+        baths: data.baths || '',
+        sqft: data.sqft || '',
+        buildingType: data.building_type || '',
+        unitsPerFloor: data.units_per_floor || '',
+        totalUnits: data.total_units || '',
+        landArea: data.land_area || '',
+        architect: data.architect || '',
+        parkingAvailable: data.parking_available || '',
+        parkingPrice: data.parking_price || '',
+        passengerLifts: data.passenger_lifts || '',
+        frontRoadSize: data.front_road_size || '',
+        totalShare: data.total_share || '',
+        landmarks: data.landmarks || '',
+        googleMapLink: data.google_map_link || '',
+        completionDate: data.completion_date || '',
+        overview: data.overview || '',
+        brochureUrl: data.brochure_url || '',
+        amenities: data.amenities || [],
+        customAmenities: data.custom_amenities || [],
+        availableUnits: data.available_units || [],
+        inventory: data.inventory || [],
+        parkingInventory: data.parking_inventory || [],
+        milestones: data.milestones || [],
+        images: {
+          hero: data.images?.hero || '',
+          map: data.images?.map || '',
+          floorPlan: data.images?.floorPlan || '',
+          video: data.images?.video || '',
+          gallery: data.images?.gallery || [],
+        }
+      });
     } catch (error) {
-      toast.error("Error fetching property details");
+      toast.error('Error fetching property details');
     }
   };
 
@@ -221,42 +225,19 @@ export default function PropertyForm() {
 
     setUploadingImage('gallery');
     toast.info(`Uploading ${files.length} image(s) to gallery...`);
-
     const newGalleryUrls = [];
-
     try {
-      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-      const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-      
-      if (!cloudName || !uploadPreset) {
-        throw new Error("Cloudinary keys are missing in the .env file!");
-      }
-
-      const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
-
       for (const file of files) {
-        const uploadData = new FormData();
-        uploadData.append('file', file);
-        uploadData.append('upload_preset', uploadPreset);
-
-        const res = await fetch(url, { method: 'POST', body: uploadData });
-        const data = await res.json();
-        
-        if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
-        
-        setNewlyUploadedMedia(prev => [...prev, data.secure_url]);
-        newGalleryUrls.push(data.secure_url);
+        const publicUrl = await uploadMedia(file, 'gallery', formData.id || 'new');
+        setNewlyUploadedMedia(prev => [...prev, publicUrl]);
+        newGalleryUrls.push(publicUrl);
       }
-
       setFormData(prev => ({
         ...prev,
-        images: {
-          ...prev.images,
-          gallery: [...(prev.images?.gallery || []), ...newGalleryUrls]
-        }
+        images: { ...prev.images, gallery: [...(prev.images?.gallery || []), ...newGalleryUrls] }
       }));
       setIsDirty(true);
-      toast.success(`Gallery uploaded successfully!`);
+      toast.success('Gallery uploaded successfully!');
     } catch (error) {
       toast.error(`Error uploading gallery: ${error.message}`);
       console.error(error);
@@ -266,10 +247,8 @@ export default function PropertyForm() {
   };
 
   const removeGalleryImage = (urlToRemove) => {
-    if (!window.confirm("Are you sure you want to remove this gallery image?")) return;
-    if (urlToRemove?.includes('cloudinary.com')) {
-      setMediaToDelete(prev => [...prev, urlToRemove]);
-    }
+    if (!window.confirm('Are you sure you want to remove this gallery image?')) return;
+    setMediaToDelete(prev => [...prev, urlToRemove]);
     setFormData(prev => ({
       ...prev,
       images: {
@@ -287,62 +266,19 @@ export default function PropertyForm() {
     setUploadingImage(mediaType);
     toast.info(`Uploading ${mediaType}...`);
     try {
-      // Use Firebase Storage for brochure to bypass Cloudinary PDF delivery restrictions on free accounts
+      const publicUrl = await uploadMedia(file, mediaType, formData.id || 'new');
+
+      // Queue old media for deletion
+      const oldUrl = mediaType === 'brochure' ? formData.brochureUrl : formData.images[mediaType];
+      if (oldUrl) setMediaToDelete(prev => [...prev, oldUrl]);
+
+      setNewlyUploadedMedia(prev => [...prev, publicUrl]);
+
       if (mediaType === 'brochure') {
-        const storageRef = ref(storage, `brochures/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        
-        const oldBrochure = formData.brochureUrl;
-        if (oldBrochure) {
-          if (oldBrochure.includes('cloudinary.com')) {
-            setMediaToDelete(prev => [...prev, oldBrochure]);
-          } else if (oldBrochure.includes('firebasestorage')) {
-            try {
-              const oldRef = ref(storage, oldBrochure);
-              await deleteObject(oldRef);
-            } catch (err) {
-              console.error("Failed to delete old brochure from Firebase", err);
-            }
-          }
-        }
-        
-        setFormData(prev => ({ ...prev, brochureUrl: url }));
-        setIsDirty(true);
-        toast.success(`Brochure uploaded successfully!`);
-        return;
+        setFormData(prev => ({ ...prev, brochureUrl: publicUrl }));
+      } else {
+        setFormData(prev => ({ ...prev, images: { ...prev.images, [mediaType]: publicUrl } }));
       }
-
-      // Default Cloudinary Upload
-      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-      const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-      
-      if (!cloudName || !uploadPreset) {
-        throw new Error("Cloudinary keys are missing in the .env file!");
-      }
-
-      // 'auto' safely handles images, videos
-      const url = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
-
-      const uploadData = new FormData();
-      uploadData.append('file', file);
-      uploadData.append('upload_preset', uploadPreset);
-
-      const res = await fetch(url, { method: 'POST', body: uploadData });
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
-      
-      const oldUrl = formData.images[mediaType];
-      if (oldUrl && oldUrl.includes('cloudinary.com')) {
-        setMediaToDelete(prev => [...prev, oldUrl]);
-      }
-      setNewlyUploadedMedia(prev => [...prev, data.secure_url]);
-
-      setFormData(prev => ({
-        ...prev,
-        images: { ...prev.images, [mediaType]: data.secure_url }
-      }));
       setIsDirty(true);
       toast.success(`${mediaType} uploaded successfully!`);
     } catch (error) {
@@ -360,49 +296,21 @@ export default function PropertyForm() {
 
     try {
       const propId = formData.id || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const docRef = doc(db, 'properties', propId);
-      
-      await setDoc(docRef, {
-        name: formData.name,
-        location: formData.location,
-        price: formData.price,
-        status: formData.status,
-        propertyType: formData.propertyType,
-        beds: Number(formData.beds),
-        baths: Number(formData.baths),
-        sqft: formData.sqft,
-        buildingType: formData.buildingType,
-        unitsPerFloor: formData.unitsPerFloor,
-        totalUnits: formData.totalUnits,
-        landArea: formData.landArea,
-        architect: formData.architect,
-        parkingAvailable: formData.parkingAvailable,
-        parkingPrice: formData.parkingPrice,
-        passengerLifts: formData.passengerLifts,
-        frontRoadSize: formData.frontRoadSize,
-        totalShare: formData.totalShare,
-        landmarks: formData.landmarks,
-        completionDate: formData.completionDate,
-        overview: formData.overview,
-        brochureUrl: formData.brochureUrl,
-        availableUnits: formData.availableUnits,
-        inventory: formData.inventory,
-        parkingInventory: formData.parkingInventory || [],
-        amenities: formData.amenities,
-        customAmenities: formData.customAmenities || [],
-        images: formData.images
-      }, { merge: true });
+      const dbData = mapPropertyToDB({ ...formData, id: propId });
 
-      // Save custom property types if dirty
-      await setDoc(doc(db, 'settings', 'propertyTypes'), { types: localPropertyTypes });
+      const { error } = await supabase.from('properties').upsert(dbData, { onConflict: 'id' });
+      if (error) throw error;
 
-      // GC: Successfully saved to DB, so we can now safely delete the old replaced media
+      // Save custom property types
+      await supabase.from('settings').upsert({ key: 'property_types', value: { types: localPropertyTypes } });
+
+      // GC: Successfully saved, now safely delete old replaced media
       if (mediaToDelete.length > 0) {
-        toast.info("Cleaning up old media...");
-        await Promise.all(mediaToDelete.map(url => deleteCloudinaryMedia(url)));
+        toast.info('Cleaning up old media...');
+        await Promise.all(mediaToDelete.map(url => deleteMedia(url)));
         setMediaToDelete([]);
       }
-      
+
       // Clear newly uploaded tracking so unmount doesn't delete them
       setNewlyUploadedMedia([]);
 
@@ -411,7 +319,7 @@ export default function PropertyForm() {
       navigate('/admin/dashboard');
     } catch (error) {
       console.error(error);
-      toast.error(error.message ? `Error saving property: ${error.message}` : "Error saving property");
+      toast.error(error.message ? `Error saving property: ${error.message}` : 'Error saving property');
       setBypassUnsavedGuard(false);
     } finally {
       setLoading(false);
@@ -1153,7 +1061,7 @@ export default function PropertyForm() {
                       <img src={formData.images.hero} alt="Hero Preview" className="h-32 object-cover rounded-md mb-2 shadow-sm" />
                       <button type="button" onClick={() => {
                         if (window.confirm("Are you sure you want to remove this hero image?")) {
-                          if (formData.images.hero?.includes('cloudinary.com')) setMediaToDelete(prev => [...prev, formData.images.hero]);
+                          setMediaToDelete(prev => [...prev, formData.images.hero]);
                           setFormData(p => ({...p, images: {...p.images, hero: ''}}));
                           setIsDirty(true);
                         }
@@ -1187,7 +1095,7 @@ export default function PropertyForm() {
                 <input type="url" name="hero" value={formData.images.hero} onChange={handleImageChange} placeholder="https://..." className="w-full p-2 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary text-sm" />
               </div>
               
-              {formData.images.hero && formData.images.hero.includes('firebase') && (
+              {formData.images.hero && (
                 <div className="mt-2">
                   <p className="text-xs text-green-600 mb-1 font-bold">✓ Image Uploaded Successfully</p>
                 </div>
@@ -1204,7 +1112,7 @@ export default function PropertyForm() {
                       <img src={formData.images.map} alt="Map Preview" className="h-32 object-cover rounded-md mb-2 shadow-sm" />
                       <button type="button" onClick={() => {
                         if (window.confirm("Are you sure you want to remove this map image?")) {
-                          if (formData.images.map?.includes('cloudinary.com')) setMediaToDelete(prev => [...prev, formData.images.map]);
+                          setMediaToDelete(prev => [...prev, formData.images.map]);
                           setFormData(p => ({...p, images: {...p.images, map: ''}}));
                           setIsDirty(true);
                         }
@@ -1255,7 +1163,7 @@ export default function PropertyForm() {
                       <img src={formData.images.floorPlan} alt="Floor Plan Preview" className="h-32 object-contain rounded-md mb-2 shadow-sm bg-white p-2" />
                       <button type="button" onClick={() => {
                         if (window.confirm("Are you sure you want to remove this floor plan image?")) {
-                          if (formData.images.floorPlan?.includes('cloudinary.com')) setMediaToDelete(prev => [...prev, formData.images.floorPlan]);
+                          setMediaToDelete(prev => [...prev, formData.images.floorPlan]);
                           setFormData(p => ({...p, images: {...p.images, floorPlan: ''}}));
                           setIsDirty(true);
                         }
@@ -1364,7 +1272,7 @@ export default function PropertyForm() {
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 1: External Link</label>
                   <p className="text-xs text-gray-500 mb-3">Paste a public Google Drive or Dropbox link here.</p>
                   
-                  {formData.brochureUrl && (formData.brochureUrl.includes('cloudinary') || formData.brochureUrl.includes('firebasestorage')) ? (
+                  {formData.brochureUrl ? (
                     <div className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-md">
                        <div className="flex items-center gap-3">
                          <FileText size={24} className="text-indigo-500" />
@@ -1377,16 +1285,7 @@ export default function PropertyForm() {
                          type="button"
                          onClick={() => {
                            if (window.confirm("Are you sure you want to remove this brochure file?")) {
-                             if (formData.brochureUrl?.includes('cloudinary.com')) {
-                               setMediaToDelete(prev => [...prev, formData.brochureUrl]);
-                             } else if (formData.brochureUrl?.includes('firebasestorage')) {
-                               try {
-                                 const oldRef = ref(storage, formData.brochureUrl);
-                                 deleteObject(oldRef).catch(console.error);
-                               } catch (e) {
-                                 console.error("Firebase deletion error:", e);
-                               }
-                             }
+                             setMediaToDelete(prev => [...prev, formData.brochureUrl]);
                              setFormData(p => ({...p, brochureUrl: ''}));
                              setIsDirty(true);
                            }
@@ -1410,7 +1309,7 @@ export default function PropertyForm() {
                   )}
                 </div>
 
-                {!formData.brochureUrl?.includes('cloudinary') && !formData.brochureUrl?.includes('firebasestorage') && (
+                {!formData.brochureUrl && (
                   <>
                     <div className="relative flex py-2 items-center">
                       <div className="flex-grow border-t border-gray-200"></div>
@@ -1419,7 +1318,7 @@ export default function PropertyForm() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 2: Direct Upload (Firebase Storage)</label>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 2: Direct Upload (Supabase Storage)</label>
                       <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-gray-50 hover:bg-gray-100 transition-colors">
                         <div className="space-y-1 text-center">
                           {uploadingImage === 'brochure' ? (

@@ -1,8 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, Home, MessageSquare, ExternalLink, CalendarCheck, Clock, Users, Mail, Settings } from 'lucide-react';
-import { signOut } from 'firebase/auth';
-import { auth } from '../firebase';
+import { supabase } from '../supabase';
 import { useGlobalState } from '../context/GlobalState';
 
 export default function AdminSidebar() {
@@ -19,7 +18,7 @@ export default function AdminSidebar() {
       return;
     }
     setAdminUnsavedChanges(false);
-    await signOut(auth);
+    await supabase.auth.signOut();
     navigate('/admin');
   };
 

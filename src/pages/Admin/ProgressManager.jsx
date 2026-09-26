@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { supabase } from '../../supabase';
+import { uploadMedia, deleteMedia, deleteMediaBeacon } from '../../utils/supabaseStorage';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { CheckSquare, Clock, AlertCircle, Plus, Trash2, Save, X, Edit2, Upload, Loader2, Image as ImageIcon, ArrowLeft, ChevronDown, Building } from 'lucide-react';
 import { useGlobalState } from '../../context/GlobalState';
 import AdminSidebar from '../../components/AdminSidebar';
-import { deleteCloudinaryMedia, deleteCloudinaryMediaBeacon } from '../../utils/cloudinary';
 
 // Helper for simple unique ID since we don't want to rely on uuid package if not installed
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -41,7 +40,7 @@ export default function ProgressManager() {
   useEffect(() => {
     return () => {
       if (newImagesRef.current.length > 0) {
-        newImagesRef.current.forEach(url => deleteCloudinaryMediaBeacon(url));
+        newImagesRef.current.forEach(url => deleteMediaBeacon(url));
       }
     };
   }, []);
@@ -61,32 +60,14 @@ export default function ProgressManager() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     setUploadingImage(true);
-    toast.info("Uploading milestone image...");
+    toast.info('Uploading milestone image...');
     try {
-      const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-      const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-      
-      if (!cloudName || !uploadPreset) throw new Error("Cloudinary keys missing!");
-
-      const url = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
-      const uploadData = new FormData();
-      uploadData.append('file', file);
-      uploadData.append('upload_preset', uploadPreset);
-
-      const res = await fetch(url, { method: 'POST', body: uploadData });
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
-      
-      setMilestoneForm(prev => ({ 
-        ...prev, 
-        images: [...(prev.images || []), data.secure_url] 
-      }));
-      setNewlyUploadedImages(prev => [...prev, data.secure_url]);
+      const publicUrl = await uploadMedia(file, 'milestone', selectedPropertyId);
+      setMilestoneForm(prev => ({ ...prev, images: [...(prev.images || []), publicUrl] }));
+      setNewlyUploadedImages(prev => [...prev, publicUrl]);
       setAdminUnsavedChanges(true);
-      toast.success("Image uploaded successfully!");
+      toast.success('Image uploaded successfully!');
     } catch (error) {
       toast.error(`Error uploading: ${error.message}`);
       console.error(error);
@@ -100,9 +81,8 @@ export default function ProgressManager() {
       ...prev,
       images: prev.images.filter(url => url !== urlToRemove)
     }));
-    if (urlToRemove.includes('cloudinary.com')) {
-      setImagesToDelete(prev => [...prev, urlToRemove]);
-    }
+    // Queue for deletion (works for any storage URL)
+    setImagesToDelete(prev => [...prev, urlToRemove]);
     setAdminUnsavedChanges(true);
   };
 
@@ -117,60 +97,59 @@ export default function ProgressManager() {
 
     setIsSaving(true);
     try {
-      const propertyRef = doc(db, 'properties', selectedPropertyId);
-      
       let newMilestones = [...milestones];
       
       if (editingMilestoneId) {
-        // Edit existing
         newMilestones = newMilestones.map(m => m.id === editingMilestoneId ? { ...milestoneForm } : m);
       } else {
-        // Add new
         newMilestones.push({ ...milestoneForm, id: generateId() });
       }
 
-      await updateDoc(propertyRef, { milestones: newMilestones });
+      const { error } = await supabase
+        .from('properties')
+        .update({ milestones: newMilestones })
+        .eq('id', selectedPropertyId);
+      if (error) throw error;
       
       // Execute GC
       if (imagesToDelete.length > 0) {
-        await Promise.all(imagesToDelete.map(url => deleteCloudinaryMedia(url)));
+        await Promise.all(imagesToDelete.map(url => deleteMedia(url)));
         setImagesToDelete([]);
       }
-      setNewlyUploadedImages([]); // committed successfully, prevent unmount deletion
+      setNewlyUploadedImages([]); // committed, prevent unmount deletion
       
       toast.success(`Milestone ${editingMilestoneId ? 'updated' : 'added'} successfully!`);
-      
-      // Reset form
       setEditingMilestoneId(null);
       setMilestoneForm({ id: '', date: '', title: '', description: '', status: 'upcoming', percentage: 0, images: [] });
       setAdminUnsavedChanges(false);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to save milestone.");
+      toast.error('Failed to save milestone.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDeleteMilestone = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this milestone?")) return;
+    if (!window.confirm('Are you sure you want to delete this milestone?')) return;
     
     setIsSaving(true);
     try {
-      const propertyRef = doc(db, 'properties', selectedPropertyId);
       const milestoneToDelete = milestones.find(m => m.id === id);
       
-      const imagesToDelete = milestoneToDelete?.images || (milestoneToDelete?.imageUrl ? [milestoneToDelete.imageUrl] : []);
-      for (const url of imagesToDelete) {
-        await deleteCloudinaryMedia(url);
-      }
+      const urlsToDelete = milestoneToDelete?.images || (milestoneToDelete?.imageUrl ? [milestoneToDelete.imageUrl] : []);
+      await Promise.all(urlsToDelete.map(url => deleteMedia(url)));
 
       const newMilestones = milestones.filter(m => m.id !== id);
-      await updateDoc(propertyRef, { milestones: newMilestones });
-      toast.success("Milestone deleted.");
+      const { error } = await supabase
+        .from('properties')
+        .update({ milestones: newMilestones })
+        .eq('id', selectedPropertyId);
+      if (error) throw error;
+      toast.success('Milestone deleted.');
     } catch (error) {
       console.error(error);
-      toast.error("Failed to delete milestone.");
+      toast.error('Failed to delete milestone.');
     } finally {
       setIsSaving(false);
     }
@@ -193,7 +172,7 @@ export default function ProgressManager() {
     
     // Discarding form, cleanup new uploads
     if (newlyUploadedImages.length > 0) {
-      newlyUploadedImages.forEach(url => deleteCloudinaryMedia(url));
+      newlyUploadedImages.forEach(url => deleteMedia(url));
       setNewlyUploadedImages([]);
     }
     setImagesToDelete([]); // reset queue

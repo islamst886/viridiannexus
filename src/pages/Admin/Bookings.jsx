@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../../firebase';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, addDoc, setDoc, serverTimestamp, runTransaction, getDocs, where } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { useGlobalState } from '../../context/GlobalState';
 import AdminSidebar from '../../components/AdminSidebar';
 import { useNavigate } from 'react-router-dom';
@@ -105,29 +104,65 @@ export default function AdminBookings() {
   }, [isModalOpen]);
 
   useEffect(() => {
-    // Fetch Bookings
-    const q = query(collection(db, 'bookings'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setBookings(data);
-      
-      // Calculate Stats
-      let total = data.length;
-      let active = data.filter(b => b.status === 'Active').length;
-      let completed = data.filter(b => b.status === 'Completed').length;
-      let cancelled = data.filter(b => b.status === 'Cancelled').length;
-      let val = data.reduce((acc, curr) => acc + (Number(curr.totalPaid) || 0), 0);
-      
-      setStats({ total, active, completed, cancelled, valueCollected: val });
+    const fetchBookings = async () => {
+      const { data } = await supabase.from('bookings').select('*').order('created_at', { ascending: false });
+      if (data) {
+        const mapped = data.map(d => ({
+          id: d.id,
+          bookingRef: d.booking_ref,
+          clientName: d.client_name,
+          clientEmail: d.client_email,
+          clientPhone: d.client_phone,
+          clientNid: d.client_nid,
+          linkedUserId: d.linked_user_id,
+          clientId: d.client_id,
+          propertyName: d.property_name,
+          unitType: d.unit_type,
+          unitNumber: d.unit_number,
+          stage: d.stage,
+          status: d.status,
+          totalPrice: d.total_price,
+          totalPaid: d.total_paid,
+          balanceDue: d.balance_due
+        }));
+        setBookings(mapped);
+
+        // Calculate Stats
+        let total = mapped.length;
+        let active = mapped.filter(b => b.status === 'Active').length;
+        let completed = mapped.filter(b => b.status === 'Completed').length;
+        let cancelled = mapped.filter(b => b.status === 'Cancelled').length;
+        let val = mapped.reduce((acc, curr) => acc + (Number(curr.totalPaid) || 0), 0);
+        
+        setStats({ total, active, completed, cancelled, valueCollected: val });
+      }
       setLoading(false);
-    });
+    };
 
-    // Fetch Properties for form
-    const pSub = onSnapshot(collection(db, 'properties'), (snap) => {
-      setProperties(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    fetchBookings();
 
-    return () => { unsub(); pSub(); };
+    const sub = supabase.channel('bookings_admin')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, fetchBookings)
+      .subscribe();
+
+    // Fetch Properties
+    const fetchProperties = async () => {
+      const { data } = await supabase.from('properties').select('*');
+      if (data) {
+        setProperties(data.map(d => ({
+          id: d.id,
+          name: d.name,
+          location: d.location,
+          inventory: d.inventory,
+          availableUnits: d.available_units,
+          parkingPrice: d.parking_price,
+          parkingInventory: d.parking_inventory
+        })));
+      }
+    };
+    fetchProperties();
+
+    return () => supabase.removeChannel(sub);
   }, []);
 
   const formatMoney = (amount) => {
@@ -439,11 +474,19 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
     setSearchingLink(true);
     setLinkResult(null);
     try {
-      const q = query(collection(db, 'users'), where('email', '==', linkSearch));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const userDoc = snap.docs[0];
-        setLinkResult({ id: userDoc.id, ...userDoc.data() });
+      const { data, error } = await supabase.from('profiles').select('*').eq('email', linkSearch);
+      if (error) throw error;
+      if (data && data.length > 0) {
+        const userDoc = data[0];
+        setLinkResult({ 
+          id: userDoc.id, 
+          displayName: userDoc.display_name,
+          email: userDoc.email,
+          phone: userDoc.phone,
+          nidType: userDoc.nid_type,
+          nid: userDoc.nid,
+          address: userDoc.address
+        });
       } else {
         toast.info("No user found with that email.");
       }
@@ -520,152 +563,117 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      // 1. Generate sequential Booking Ref using a Transaction
-      const counterRef = doc(db, 'meta', 'bookingCounter');
+      // Create Booking Reference
+      const year = new Date().getFullYear();
+      const randNum = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+      const bookingRef = `VN-${year}-${randNum}`;
+
+      const propertyData = properties.find(p => p.id === form.propertyId);
+      if (!propertyData) throw new Error("Property not found");
+
+      let inventory = propertyData.inventory || [];
+      const invIndex = inventory.findIndex(inv => inv.id === form.inventoryId);
       
-      const newBookingId = await runTransaction(db, async (transaction) => {
-        // --- READS ---
-        const counterDoc = await transaction.get(counterRef);
-        
-        const propertyRef = doc(db, 'properties', form.propertyId);
-        const propertyDoc = await transaction.get(propertyRef);
-        if (!propertyDoc.exists()) throw new Error("Property not found");
-
-        // --- PROCESSING & WRITES ---
-        let currentVal = 1;
-        if (counterDoc.exists()) {
-          currentVal = counterDoc.data().value + 1;
+      if (invIndex === -1) throw new Error("Selected unit not found in inventory.");
+      if (inventory[invIndex].status !== 'Available') {
+        throw new Error(`This unit is no longer available (Current status: ${inventory[invIndex].status}). Someone may have booked it just now.`);
+      }
+      
+      let parkingInventory = propertyData.parkingInventory || [];
+      const selectedSpotIds = form.parkingSpotIds || [];
+      
+      for (const spotId of selectedSpotIds) {
+        const spotIdx = parkingInventory.findIndex(s => s.id === spotId);
+        if (spotIdx === -1) throw new Error(`Parking spot ${spotId} not found.`);
+        if (parkingInventory[spotIdx].status !== 'Available') {
+          throw new Error(`Parking spot "${parkingInventory[spotIdx].label}" is no longer available. Please select a different spot.`);
         }
+      }
+      
+      // We do Sequential Updates instead of Transaction since we do not have an RPC here
+      // 1. Create Booking
+      const selectedSpots = (propertyData.parkingInventory || []).filter(s => (form.parkingSpotIds || []).includes(s.id));
+      const parkingDisplayStr = selectedSpots.map(s => `${s.label}${s.level ? ` (${s.level})` : ''}`).join(', ') || null;
+      
+      const { data: newBooking, error: bookingError } = await supabase.from('bookings').insert({
+        client_name: form.clientName,
+        client_email: form.clientEmail,
+        client_phone: form.clientPhone,
+        client_nid: form.clientNid,
+        client_address: form.clientAddress,
+        linked_user_id: form.linkedUserId,
         
-        const year = new Date().getFullYear();
-        const paddedNum = String(currentVal).padStart(4, '0');
-        const bookingRef = `VN-${year}-${paddedNum}`;
+        property_id: form.propertyId,
+        property_name: currentProperty.name,
+        property_location: currentProperty.location,
+        inventory_id: form.inventoryId,
+        unit_type: inventory[invIndex].unitType || '',
+        unit_number: `Floor ${inventory[invIndex].floor || ''}, ${
+          (inventory[invIndex].unitType || '').toLowerCase().includes((inventory[invIndex].unitName || '').toLowerCase()) 
+          ? (inventory[invIndex].unitName || '') 
+          : `Unit ${inventory[invIndex].unitName || ''}`
+        }`,
+        parking_spot_ids: form.parkingSpotIds || [],
+        parking_included: parkingDisplayStr,
+        
+        total_price: Number(form.totalPrice),
+        token_amount: Number(form.tokenAmount),
+        down_payment_amount: Number(form.downPaymentAmount || 0),
+        total_paid: 0, 
+        balance_due: Number(form.totalPrice),
+        installment_plan: form.installmentPlan || 'Custom',
+        
+        stage: 'EOI',
+        status: 'Active',
+        
+        booking_ref: bookingRef,
+        created_by: adminUid,
+        last_updated_by: adminUid,
+        internal_notes: form.notes || ''
+      }).select().single();
 
-        const propertyData = propertyDoc.data();
-        let inventory = propertyData.inventory || [];
-        const invIndex = inventory.findIndex(inv => inv.id === form.inventoryId);
-        
-        if (invIndex === -1) throw new Error("Selected unit not found in inventory.");
-        if (inventory[invIndex].status !== 'Available') {
-          throw new Error(`This unit is no longer available (Current status: ${inventory[invIndex].status}). Someone may have booked it just now.`);
-        }
-        
-        // --- VALIDATE & CLAIM PARKING SPOTS ---
-        let parkingInventory = propertyData.parkingInventory || [];
-        const selectedSpotIds = form.parkingSpotIds || [];
-        
-        for (const spotId of selectedSpotIds) {
-          const spotIdx = parkingInventory.findIndex(s => s.id === spotId);
-          if (spotIdx === -1) throw new Error(`Parking spot ${spotId} not found.`);
-          if (parkingInventory[spotIdx].status !== 'Available') {
-            throw new Error(`Parking spot "${parkingInventory[spotIdx].label}" is no longer available. Please select a different spot.`);
-          }
-        }
-        
-        // Perform Writes
-        transaction.set(counterRef, { value: currentVal }, { merge: true });
+      if (bookingError) throw bookingError;
+      const newBookingId = newBooking.id;
 
-        inventory[invIndex].status = 'Booked';
-        
-        // Assign selected parking spots atomically
-        const bookingRefDoc = doc(collection(db, 'bookings'));
-        for (const spotId of selectedSpotIds) {
-          const spotIdx = parkingInventory.findIndex(s => s.id === spotId);
-          parkingInventory[spotIdx].status = 'Assigned';
-          parkingInventory[spotIdx].assignedBookingId = bookingRefDoc.id;
-        }
-        transaction.update(propertyRef, { inventory, parkingInventory });
+      // 2. Update Property Inventory (Optimistic without RPC)
+      inventory[invIndex].status = 'Booked';
+      for (const spotId of selectedSpotIds) {
+        const spotIdx = parkingInventory.findIndex(s => s.id === spotId);
+        parkingInventory[spotIdx].status = 'Assigned';
+        parkingInventory[spotIdx].assignedBookingId = newBookingId;
+      }
+      await supabase.from('properties').update({ inventory, parking_inventory: parkingInventory }).eq('id', form.propertyId);
 
-        // 2. Create the main booking document
-        // (bookingRefDoc already created above for parking spot linking)
-        const selectedSpots = (propertyData.parkingInventory || []).filter(s => (form.parkingSpotIds || []).includes(s.id));
-        const parkingDisplayStr = selectedSpots.map(s => `${s.label}${s.level ? ` (${s.level})` : ''}`).join(', ') || null;
-        const bookingData = {
-          clientName: form.clientName,
-          clientEmail: form.clientEmail,
-          clientPhone: form.clientPhone,
-          clientNid: form.clientNid,
-          clientAddress: form.clientAddress,
-          linkedUserId: form.linkedUserId,
-          
-          propertyId: form.propertyId,
-          propertyName: currentProperty.name,
-          propertyLocation: currentProperty.location,
-          inventoryId: form.inventoryId,
-          unitType: inventory[invIndex].unitType || '',
-          unitNumber: `Floor ${inventory[invIndex].floor || ''}, ${
-            (inventory[invIndex].unitType || '').toLowerCase().includes((inventory[invIndex].unitName || '').toLowerCase()) 
-            ? (inventory[invIndex].unitName || '') 
-            : `Unit ${inventory[invIndex].unitName || ''}`
-          }`,
-          parkingSpotIds: form.parkingSpotIds || [],
-          parkingIncluded: parkingDisplayStr,
-          
-          totalPrice: Number(form.totalPrice),
-          tokenAmount: Number(form.tokenAmount),
-          downPaymentAmount: Number(form.downPaymentAmount || 0),
-          totalPaid: 0, 
-          balanceDue: Number(form.totalPrice),
-          installmentPlan: form.installmentPlan || 'Custom',
-          
-          stage: 'EOI',
-          status: 'Active',
-          cancellationReason: null,
-          refundAmount: null,
-          
-          bookingRef,
-          createdAt: serverTimestamp(),
-          createdBy: adminUid,
-          lastUpdatedAt: serverTimestamp(),
-          lastUpdatedBy: adminUid,
-          internalNotes: form.notes || ''
-        };
-        transaction.set(bookingRefDoc, bookingData);
-
-        // 3. Create the Activity Log
-        const logRef = doc(collection(db, `bookings/${bookingRefDoc.id}/activityLog`));
-        transaction.set(logRef, {
-          action: "Booking created",
-          detail: `Initial booking created by ${adminName}`,
-          performedBy: adminName,
-          performedAt: serverTimestamp()
-        });
-
-        return bookingRefDoc.id; // pass this out of transaction
+      // 3. Activity Log
+      await supabase.from('booking_activity_log').insert({
+        booking_id: newBookingId,
+        action: "Booking created",
+        detail: `Initial booking created by ${adminName}`,
+        performed_by: adminName
       });
 
-      // 4. Generate scheduled payments in subcollection (non-transactional is fine here)
-      const tokenRef = doc(collection(db, `bookings/${newBookingId}/payments`));
-      await setDoc(tokenRef, {
+      // 4. Generate scheduled payments
+      await supabase.from('booking_payments').insert({
+        booking_id: newBookingId,
         type: 'Token',
-        installmentNumber: null,
-        scheduledDate: new Date(), // Due today
-        paidDate: null, // Admin records it later
-        scheduledAmount: Number(form.tokenAmount),
-        receivedAmount: 0,
-        paymentMode: 'Cash', // Default
-        referenceNumber: '',
+        scheduled_date: new Date().toISOString(),
+        scheduled_amount: Number(form.tokenAmount),
+        received_amount: 0,
+        payment_mode: 'Cash',
         status: 'Scheduled',
-        note: '',
-        recordedBy: adminUid,
-        recordedAt: serverTimestamp()
+        recorded_by: adminUid
       });
 
       if (Number(form.downPaymentAmount) > 0) {
-        const dpRef = doc(collection(db, `bookings/${newBookingId}/payments`));
-        await setDoc(dpRef, {
+        await supabase.from('booking_payments').insert({
+          booking_id: newBookingId,
           type: 'Down Payment',
-          installmentNumber: null,
-          scheduledDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // Due in 14 days approx
-          paidDate: null,
-          scheduledAmount: Number(form.downPaymentAmount),
-          receivedAmount: 0,
-          paymentMode: 'Cash',
-          referenceNumber: '',
+          scheduled_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          scheduled_amount: Number(form.downPaymentAmount),
+          received_amount: 0,
+          payment_mode: 'Cash',
           status: 'Scheduled',
-          note: '',
-          recordedBy: adminUid,
-          recordedAt: serverTimestamp()
+          recorded_by: adminUid
         });
       }
 
@@ -673,66 +681,45 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
       if (form.installmentCount && Number(form.installmentCount) > 0) {
         const count = Number(form.installmentCount);
         const amountRemaining = Number(form.totalPrice) - Number(form.tokenAmount) - Number(form.downPaymentAmount || 0);
-        
-        // Highly standard professional rounding to nearest 10 (so installments end in clean 0s)
         const baseInstAmount = Math.round((amountRemaining / count) / 10) * 10;
-        
         let currentDate = form.installmentStartDate ? new Date(form.installmentStartDate) : new Date();
         
         for (let i = 1; i <= count; i++) {
-          // If it's the last installment, it absorbs the exact remainder to ensure the total is strictly maintained.
           const currentInstAmount = (i === count) 
             ? (amountRemaining - (baseInstAmount * (count - 1))) 
             : baseInstAmount;
             
-          const instRef = doc(collection(db, `bookings/${newBookingId}/payments`));
-          await setDoc(instRef, {
+          await supabase.from('booking_payments').insert({
+            booking_id: newBookingId,
             type: 'Installment',
-            installmentNumber: i,
-            scheduledDate: new Date(currentDate),
-            paidDate: null,
-            scheduledAmount: currentInstAmount,
-            receivedAmount: 0,
-            paymentMode: 'Cash',
-            referenceNumber: '',
+            installment_number: i,
+            scheduled_date: new Date(currentDate).toISOString(),
+            scheduled_amount: currentInstAmount,
+            received_amount: 0,
+            payment_mode: 'Cash',
             status: 'Scheduled',
-            note: '',
-            recordedBy: adminUid,
-            recordedAt: serverTimestamp()
+            recorded_by: adminUid
           });
 
           // Advance date
           switch (form.installmentFrequency) {
-            case 'Monthly':
-              currentDate.setMonth(currentDate.getMonth() + 1);
-              break;
-            case 'Bi-Monthly':
-              currentDate.setMonth(currentDate.getMonth() + 2);
-              break;
-            case 'Quarterly':
-              currentDate.setMonth(currentDate.getMonth() + 3);
-              break;
-            case 'Tri-Annual':
-              currentDate.setMonth(currentDate.getMonth() + 4);
-              break;
-            case 'Semi-Annual':
-              currentDate.setMonth(currentDate.getMonth() + 6);
-              break;
-            case 'Annual':
-              currentDate.setMonth(currentDate.getMonth() + 12);
-              break;
-            default:
-              currentDate.setMonth(currentDate.getMonth() + 1);
+            case 'Monthly': currentDate.setMonth(currentDate.getMonth() + 1); break;
+            case 'Bi-Monthly': currentDate.setMonth(currentDate.getMonth() + 2); break;
+            case 'Quarterly': currentDate.setMonth(currentDate.getMonth() + 3); break;
+            case 'Tri-Annual': currentDate.setMonth(currentDate.getMonth() + 4); break;
+            case 'Semi-Annual': currentDate.setMonth(currentDate.getMonth() + 6); break;
+            case 'Annual': currentDate.setMonth(currentDate.getMonth() + 12); break;
+            default: currentDate.setMonth(currentDate.getMonth() + 1);
           }
         }
       }
 
       // If linked, notify user
       if (form.linkedUserId) {
-        await addDoc(collection(db, `users/${form.linkedUserId}/notifications`), {
+        await supabase.from('notifications').insert({
+          user_id: form.linkedUserId,
           text: `Your booking for ${currentProperty.name} has been confirmed.`,
-          read: false,
-          createdAt: serverTimestamp()
+          read: false
         });
       }
 

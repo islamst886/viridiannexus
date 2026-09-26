@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
-
-const SETTINGS_DOC = doc(db, 'settings', 'propertyTypes');
+import { supabase } from '../supabase';
 
 const DEFAULT_TYPES = [
   'Apartment', 'Penthouse', 'Luxury Apartment', 'Duplex',
@@ -11,7 +8,7 @@ const DEFAULT_TYPES = [
 
 /**
  * usePropertyTypes
- * Subscribes to the Firestore settings/propertyTypes document in real time.
+ * Subscribes to the Supabase settings table (key='property_types') in real time.
  * Returns { types, loading } — types is always sorted alphabetically.
  */
 export function usePropertyTypes() {
@@ -19,38 +16,71 @@ export function usePropertyTypes() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(SETTINGS_DOC, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setTypes(Array.isArray(data.types) && data.types.length > 0 ? [...data.types].sort() : DEFAULT_TYPES);
+    const fetchTypes = async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'property_types')
+        .single();
+
+      const fetched = data?.value?.types;
+      if (Array.isArray(fetched) && fetched.length > 0) {
+        setTypes([...fetched].sort());
       } else {
-        // First run – seed defaults into Firestore
-        setDoc(SETTINGS_DOC, { types: DEFAULT_TYPES }).catch(console.error);
+        // First run — seed defaults into Supabase
+        await supabase
+          .from('settings')
+          .upsert({ key: 'property_types', value: { types: DEFAULT_TYPES } });
         setTypes(DEFAULT_TYPES);
       }
       setLoading(false);
-    }, console.error);
-    return unsub;
+    };
+
+    fetchTypes();
+
+    // Realtime subscription
+    const sub = supabase
+      .channel('property_types_setting')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'settings',
+          filter: 'key=eq.property_types',
+        },
+        (payload) => {
+          const t = payload.new?.value?.types;
+          if (Array.isArray(t)) setTypes([...t].sort());
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(sub);
   }, []);
 
   return { types, loading };
 }
 
 /**
- * addPropertyType – adds a new type to Firestore.
+ * addPropertyType — adds a new type to Supabase settings.
  * Returns the updated array.
  */
 export async function addPropertyType(newType, currentTypes) {
   const updated = [...new Set([...currentTypes, newType.trim()])].sort();
-  await setDoc(SETTINGS_DOC, { types: updated });
+  await supabase
+    .from('settings')
+    .upsert({ key: 'property_types', value: { types: updated } });
   return updated;
 }
 
 /**
- * removePropertyType – removes a type from Firestore.
+ * removePropertyType — removes a type from Supabase settings.
  */
 export async function removePropertyType(typeToRemove, currentTypes) {
-  const updated = currentTypes.filter(t => t !== typeToRemove);
-  await setDoc(SETTINGS_DOC, { types: updated });
+  const updated = currentTypes.filter((t) => t !== typeToRemove);
+  await supabase
+    .from('settings')
+    .upsert({ key: 'property_types', value: { types: updated } });
   return updated;
 }

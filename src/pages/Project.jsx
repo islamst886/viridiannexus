@@ -150,16 +150,18 @@ function ProjectContent() {
     }
     setSubmittingInquiry(true);
     try {
-      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('../firebase');
-      await addDoc(collection(db, 'inquiries'), {
-        ...inquiryData,
-        propertyId: projectData.id,
-        propertyName: projectData.name,
+      const { supabase } = await import('../supabase');
+      const { error } = await supabase.from('inquiries').insert({
+        name: inquiryData.name,
+        phone: inquiryData.phone,
+        email: inquiryData.email,
+        message: inquiryData.message,
+        property_id: projectData.id,
+        property_name: projectData.name,
         source: 'Property Details Page',
-        status: 'Unread',
-        createdAt: serverTimestamp()
+        status: 'Unread'
       });
+      if (error) throw error;
       import('react-toastify').then(({ toast }) => toast.success("Thank you! Our consultants will contact you shortly."));
       setInquiryData({ name: '', phone: '', email: '', message: '' });
     } catch (err) {

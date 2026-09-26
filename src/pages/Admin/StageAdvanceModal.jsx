@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase';
-import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { STAGES, evaluateStagePrerequisites } from '../../utils/bookingStageGates';
 import { 
   X, CheckCircle2, XCircle, AlertCircle, ArrowRight, 
@@ -64,33 +63,32 @@ export default function StageAdvanceModal({
     try {
       const updates = {
         stage: targetStage,
-        lastUpdatedAt: serverTimestamp(),
-        lastUpdatedBy: adminUid
+        last_updated_by: adminUid
       };
 
       // Include stage metadata if applicable
       if (targetStage === 'Agreement Signed') {
-        updates.agreementDate = agreementDate;
-        if (agreementRef) updates.agreementRef = agreementRef;
+        updates.agreement_date = agreementDate;
+        if (agreementRef) updates.agreement_ref = agreementRef;
       } else if (targetStage === 'Handover' || targetStage === 'Completed') {
-        updates.handoverDate = handoverDate;
-        updates.handoverRecipient = handoverRecipient;
-        if (handoverNotes) updates.handoverNotes = handoverNotes;
+        updates.handover_date = handoverDate;
+        updates.handover_recipient = handoverRecipient;
+        if (handoverNotes) updates.handover_notes = handoverNotes;
       }
 
-      await updateDoc(doc(db, 'bookings', booking.id), updates);
+      await supabase.from('bookings').update(updates).eq('id', booking.id);
 
       // Log in activity log
       const isOverride = !evaluation.allowed && isSuperAdmin && overrideAuthorized;
-      await addDoc(collection(db, `bookings/${booking.id}/activityLog`), {
+      await supabase.from('booking_activity_log').insert({
+        booking_id: booking.id,
         action: isOverride ? "Stage Override (Super Admin)" : isRollback ? "Stage Rolled Back" : "Stage Advanced",
         detail: isOverride 
           ? `Stage forcibly set from "${booking.stage}" to "${targetStage}". Justification: ${overrideReason.trim()}`
           : isRollback
           ? `Stage reverted from "${booking.stage}" to "${targetStage}"`
           : `Stage advanced from "${booking.stage}" to "${targetStage}"`,
-        performedBy: adminName,
-        performedAt: serverTimestamp()
+        performed_by: adminName
       });
 
       toast.success(isOverride ? "Stage updated with Super Admin override" : `Stage updated to ${targetStage}`);

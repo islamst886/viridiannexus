@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { db } from '../../firebase';
-import { doc, updateDoc, serverTimestamp, runTransaction, addDoc, collection } from 'firebase/firestore';
+import { supabase } from '../../supabase';
 import { X, AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -24,67 +23,55 @@ export default function CancelBookingModal({ isOpen, onClose, booking, adminName
     setLoading(true);
     try {
       if (booking?.propertyId && booking?.inventoryId) {
-        await runTransaction(db, async (txn) => {
-          const propRef = doc(db, 'properties', booking.propertyId);
-          const propSnap = await txn.get(propRef);
-          
-          if (propSnap.exists()) {
-            const pData = propSnap.data();
-            const inv = [...(pData.inventory || [])];
-            const targetUnit = inv.find(u => u.id === booking.inventoryId);
-            if (targetUnit) {
-              targetUnit.status = 'Available';
-              delete targetUnit.bookingId;
-              delete targetUnit.bookingRef;
-              delete targetUnit.clientName;
-            }
-
-            // Release parking spots back to Available
-            const parkingInv = [...(pData.parkingInventory || [])];
-            const spotIds = booking.parkingSpotIds || [];
-            for (const spotId of spotIds) {
-              const spotIdx = parkingInv.findIndex(s => s.id === spotId);
-              if (spotIdx !== -1) {
-                parkingInv[spotIdx].status = 'Available';
-                parkingInv[spotIdx].assignedBookingId = null;
-              }
-            }
-
-            txn.update(propRef, { 
-              inventory: inv,
-              parkingInventory: parkingInv,
-              lastUpdatedAt: serverTimestamp() 
-            });
+        const { data: propData } = await supabase.from('properties').select('*').eq('id', booking.propertyId).single();
+        
+        if (propData) {
+          const inv = [...(propData.inventory || [])];
+          const targetUnit = inv.find(u => u.id === booking.inventoryId);
+          if (targetUnit) {
+            targetUnit.status = 'Available';
           }
-          
-          txn.update(doc(db, 'bookings', booking.id), {
-            status: 'Cancelled',
-            stage: 'Cancelled',
-            cancellationNote: reason.trim(),
-            cancellationDate: serverTimestamp(),
-            cancelledBy: adminName,
-            cancelledByUid: adminUid,
-            lastUpdatedAt: serverTimestamp(),
-            lastUpdatedBy: adminUid
-          });
-        });
-      } else {
-        await updateDoc(doc(db, 'bookings', booking.id), {
+
+          // Release parking spots back to Available
+          const parkingInv = [...(propData.parking_inventory || [])];
+          const spotIds = booking.parkingSpotIds || [];
+          for (const spotId of spotIds) {
+            const spotIdx = parkingInv.findIndex(s => s.id === spotId);
+            if (spotIdx !== -1) {
+              parkingInv[spotIdx].status = 'Available';
+              parkingInv[spotIdx].assignedBookingId = null;
+            }
+          }
+
+          await supabase.from('properties').update({ 
+            inventory: inv,
+            parking_inventory: parkingInv
+          }).eq('id', booking.propertyId);
+        }
+        
+        await supabase.from('bookings').update({
           status: 'Cancelled',
-          cancellationNote: reason.trim(),
-          cancellationDate: serverTimestamp(),
-          cancelledBy: adminName,
-          cancelledByUid: adminUid,
-          lastUpdatedAt: serverTimestamp(),
-          lastUpdatedBy: adminUid
-        });
+          stage: 'Cancelled',
+          cancellation_note: reason.trim(),
+          cancellation_date: new Date().toISOString(),
+          cancelled_by: adminName,
+          last_updated_by: adminUid
+        }).eq('id', booking.id);
+      } else {
+        await supabase.from('bookings').update({
+          status: 'Cancelled',
+          cancellation_note: reason.trim(),
+          cancellation_date: new Date().toISOString(),
+          cancelled_by: adminName,
+          last_updated_by: adminUid
+        }).eq('id', booking.id);
       }
 
-      await addDoc(collection(db, `bookings/${booking.id}/activityLog`), {
+      await supabase.from('booking_activity_log').insert({
+        booking_id: booking.id,
         action: "Booking Cancelled",
         detail: `Booking cancelled. Reason: ${reason.trim()} (Assigned unit released to Available)`,
-        performedBy: adminName,
-        performedAt: serverTimestamp()
+        performed_by: adminName
       });
 
       toast.success('Booking cancelled successfully.');
