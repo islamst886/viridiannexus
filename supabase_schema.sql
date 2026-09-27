@@ -355,3 +355,39 @@ BEGIN
   VALUES (p_booking_id, 'parking_changed', 'Changed parking from ' || p_old_slot || ' to ' || p_new_slot, p_actor_id, p_actor_name);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ==========================================
+-- 4. STORAGE BUCKETS & POLICIES
+-- ==========================================
+
+-- Create the public buckets
+INSERT INTO storage.buckets (id, name, public) VALUES 
+  ('property-media', 'property-media', true),
+  ('brochures', 'brochures', true),
+  ('milestones', 'milestones', true),
+  ('avatars', 'avatars', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- RLS for property-media (Public Read, Admin Write)
+CREATE POLICY "Public read property-media" ON storage.objects FOR SELECT USING (bucket_id = 'property-media');
+CREATE POLICY "Admin write property-media" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'property-media' AND (SELECT public.is_admin()));
+CREATE POLICY "Admin update property-media" ON storage.objects FOR UPDATE USING (bucket_id = 'property-media' AND (SELECT public.is_admin()));
+CREATE POLICY "Admin delete property-media" ON storage.objects FOR DELETE USING (bucket_id = 'property-media' AND (SELECT public.is_admin()));
+
+-- RLS for brochures (Public Read, Admin Write)
+CREATE POLICY "Public read brochures" ON storage.objects FOR SELECT USING (bucket_id = 'brochures');
+CREATE POLICY "Admin write brochures" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'brochures' AND (SELECT public.is_admin()));
+CREATE POLICY "Admin update brochures" ON storage.objects FOR UPDATE USING (bucket_id = 'brochures' AND (SELECT public.is_admin()));
+CREATE POLICY "Admin delete brochures" ON storage.objects FOR DELETE USING (bucket_id = 'brochures' AND (SELECT public.is_admin()));
+
+-- RLS for milestones (Public Read, Admin Write)
+CREATE POLICY "Public read milestones" ON storage.objects FOR SELECT USING (bucket_id = 'milestones');
+CREATE POLICY "Admin write milestones" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'milestones' AND (SELECT public.is_admin()));
+CREATE POLICY "Admin update milestones" ON storage.objects FOR UPDATE USING (bucket_id = 'milestones' AND (SELECT public.is_admin()));
+CREATE POLICY "Admin delete milestones" ON storage.objects FOR DELETE USING (bucket_id = 'milestones' AND (SELECT public.is_admin()));
+
+-- RLS for avatars (Public Read, Any Auth Write for now to allow profile updates)
+CREATE POLICY "Public read avatars" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
+CREATE POLICY "Auth write avatars" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars' AND auth.role() = 'authenticated');
+CREATE POLICY "Auth update avatars" ON storage.objects FOR UPDATE USING (bucket_id = 'avatars' AND auth.role() = 'authenticated');
+CREATE POLICY "Auth delete avatars" ON storage.objects FOR DELETE USING (bucket_id = 'avatars' AND auth.role() = 'authenticated');

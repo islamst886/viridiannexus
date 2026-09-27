@@ -44,6 +44,13 @@ export function mapPropertyFromDB(row) {
 }
 
 export function mapPropertyToDB(formData) {
+  const formatWithUnit = (value, defaultUnit) => {
+    if (!value) return '';
+    const strVal = String(value).trim();
+    if (/[a-zA-Z]/.test(strVal)) return strVal;
+    return `${strVal} ${defaultUnit}`;
+  };
+
   return {
     id: formData.id,
     name: formData.name,
@@ -53,16 +60,16 @@ export function mapPropertyToDB(formData) {
     property_type: formData.propertyType || [],
     beds: Number(formData.beds) || 0,
     baths: Number(formData.baths) || 0,
-    sqft: formData.sqft,
+    sqft: formatWithUnit(formData.sqft, 'Sq. FT'),
     building_type: formData.buildingType,
     units_per_floor: formData.unitsPerFloor,
     total_units: formData.totalUnits,
-    land_area: formData.landArea,
+    land_area: formatWithUnit(formData.landArea, 'Katha'),
     architect: formData.architect,
     parking_available: formData.parkingAvailable,
     parking_price: formData.parkingPrice,
     passenger_lifts: formData.passengerLifts,
-    front_road_size: formData.frontRoadSize,
+    front_road_size: formatWithUnit(formData.frontRoadSize, 'FT'),
     total_share: formData.totalShare,
     landmarks: formData.landmarks,
     google_map_link: formData.googleMapLink,

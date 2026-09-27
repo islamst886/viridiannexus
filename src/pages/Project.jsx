@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  MapPin, BedDouble, Bath, Ruler, Building, Calendar, CheckCircle, 
-  Shield, Wifi, Car, Trees, Maximize, Home, Coffee, Info, Map, 
-  LayoutDashboard, Heart, Waves, Dumbbell, Flower2, ArrowUpCircle, 
-  UserCircle, Zap, Sun, Video, Flame, Droplets, Smile, Baby, 
+import {
+  MapPin, BedDouble, Bath, Ruler, Building, Calendar, CheckCircle,
+  Shield, Wifi, Car, Trees, Maximize, Home, Coffee, Info, Map,
+  LayoutDashboard, Heart, Waves, Dumbbell, Flower2, ArrowUpCircle,
+  UserCircle, Zap, Sun, Video, Flame, Droplets, Smile, Baby,
   Briefcase, BatteryCharging, Navigation, Users, Dog, Trash, Film, FileText, Download, Loader2, Clock, ChevronLeft, ChevronRight, X, Image as ImageIcon
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -92,6 +92,18 @@ function ProjectContent() {
 
   const projectData = properties.find(p => p.id === id) || null;
   const loading = loadingProperties;
+
+  // Helper to intelligently format values with units if no text is present
+  const formatWithUnit = (value, defaultUnit) => {
+    if (!value) return '';
+    const strVal = String(value).trim();
+    // If the string already contains alphabetical characters (e.g., "FT", "Katha", "Decimal"), just return it
+    if (/[a-zA-Z]/.test(strVal)) {
+      return strVal;
+    }
+    // Otherwise, append the default unit
+    return `${strVal} ${defaultUnit}`;
+  };
 
   // Inquiry Form State
   const [inquiryData, setInquiryData] = useState({ name: '', phone: '', email: '', message: '' });
@@ -200,10 +212,10 @@ function ProjectContent() {
 
   return (
     <div className="bg-brand-neutral min-h-screen pb-20">
-      
+
       {/* 1. Premium Split Hero Header */}
       <section className="bg-brand-dark min-h-[60vh] md:min-h-[85vh] flex flex-col md:flex-row relative">
-        
+
         {/* Left Content Area (Text & Specs) */}
         <div className="w-full md:w-1/2 flex flex-col justify-center p-6 md:p-12 lg:p-24 relative z-10 pt-28 md:pt-28">
           <div className="text-white w-full max-w-xl mx-auto md:ml-auto md:mr-0">
@@ -217,13 +229,13 @@ function ProjectContent() {
                 </span>
               )}
             </div>
-            
+
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-serif mb-6 leading-tight text-white drop-shadow-sm">{projectData.name}</h1>
-            
+
             <p className="flex items-center text-brand-accent text-lg mb-10 opacity-90">
               <MapPin className="mr-2" size={20} /> {projectData.location}
             </p>
-            
+
             <div className="flex flex-wrap gap-6 text-sm font-bold uppercase tracking-wider text-brand-neutral/80 mb-12">
               <div className="flex items-center gap-2"><BedDouble size={20} className="text-brand-accent" /> {specs.beds} Beds</div>
               <div className="flex items-center gap-2"><Bath size={20} className="text-brand-accent" /> {specs.baths} Baths</div>
@@ -233,9 +245,9 @@ function ProjectContent() {
             <div className="bg-white/5 p-6 md:p-8 rounded-2xl border border-white/10 backdrop-blur-md">
               <p className="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2">Pricing</p>
               <div className="text-3xl md:text-4xl font-bold text-white mb-8 break-normal">{priceStr}</div>
-              
+
               <div className="flex flex-col sm:flex-row gap-4">
-                <button 
+                <button
                   onClick={() => toggleWishlist(projectData)}
                   className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-xl transition-all font-bold shadow-lg ${isSaved ? 'bg-brand-accent text-brand-dark' : 'bg-brand-dark text-white hover:bg-brand-accent hover:text-brand-dark border border-white/20 hover:border-transparent'}`}
                 >
@@ -244,7 +256,7 @@ function ProjectContent() {
                 </button>
 
                 {projectData.brochureUrl ? (
-                  <a 
+                  <a
                     href={projectData.brochureUrl}
                     target="_blank"
                     rel="noreferrer"
@@ -254,7 +266,7 @@ function ProjectContent() {
                     Brochure
                   </a>
                 ) : (
-                  <Link 
+                  <Link
                     to={`/contact?property=${projectData.id}`}
                     className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-brand-dark text-brand-accent font-bold hover:bg-black transition-colors shadow-lg"
                   >
@@ -269,10 +281,10 @@ function ProjectContent() {
 
         {/* Right Image Area */}
         <div className="w-full md:w-1/2 h-[50vh] md:h-auto relative order-first md:order-last">
-          <img 
-            src={projectData.images?.hero || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1920&q=80'} 
-            alt={projectData.name} 
-            className="absolute inset-0 w-full h-full object-cover object-center md:object-cover" 
+          <img
+            src={projectData.images?.hero || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1920&q=80'}
+            alt={projectData.name}
+            className="absolute inset-0 w-full h-full object-cover object-center md:object-cover"
           />
           {/* Subtle gradient to blend the edge smoothly into the dark background on desktop */}
           <div className="hidden md:block absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-brand-dark to-transparent"></div>
@@ -284,10 +296,10 @@ function ProjectContent() {
       {/* Main Content Layout */}
       <div className="container mx-auto px-4 max-w-7xl mt-12">
         <div className="flex flex-col lg:flex-row gap-12">
-          
+
           {/* Left Column (Details) */}
           <div className="w-full lg:w-8/12 space-y-16">
-            
+
             {/* 2. Technical Specifications */}
             <section>
               <h2 className="text-2xl font-serif text-brand-dark mb-6 flex items-center gap-2 border-b border-gray-200 pb-3">
@@ -309,7 +321,7 @@ function ProjectContent() {
                 {projectData.landArea && (
                   <div className="flex flex-col">
                     <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Land Area</span>
-                    <span className="text-brand-dark font-semibold text-lg">{projectData.landArea}</span>
+                    <span className="text-brand-dark font-semibold text-lg">{formatWithUnit(projectData.landArea, 'Katha')}</span>
                   </div>
                 )}
                 {projectData.architect && (
@@ -327,7 +339,7 @@ function ProjectContent() {
                 {projectData.sqft && (
                   <div className="flex flex-col">
                     <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Unit Size</span>
-                    <span className="text-brand-dark font-semibold text-lg">{projectData.sqft} SFT</span>
+                    <span className="text-brand-dark font-semibold text-lg">{formatWithUnit(projectData.sqft, 'Sq Ft')}</span>
                   </div>
                 )}
                 {projectData.parkingAvailable && (
@@ -345,7 +357,7 @@ function ProjectContent() {
                 {projectData.frontRoadSize && (
                   <div className="flex flex-col">
                     <span className="text-brand-primary/60 text-xs font-bold uppercase tracking-wider mb-2">Front Road</span>
-                    <span className="text-brand-dark font-semibold text-lg">{projectData.frontRoadSize}</span>
+                    <span className="text-brand-dark font-semibold text-lg">{formatWithUnit(projectData.frontRoadSize, 'FT')}</span>
                   </div>
                 )}
                 {projectData.passengerLifts && (
@@ -389,14 +401,14 @@ function ProjectContent() {
                     Full Timeline →
                   </Link>
                 </div>
-                
+
                 {(() => {
                   const total = projectData.milestones.length;
                   const completed = projectData.milestones.filter(m => m.status === 'completed').length;
-                  const currentMilestone = projectData.milestones.find(m => m.status === 'current') 
-                                        || [...projectData.milestones].reverse().find(m => m.status === 'completed')
-                                        || projectData.milestones[0];
-                  
+                  const currentMilestone = projectData.milestones.find(m => m.status === 'current')
+                    || [...projectData.milestones].reverse().find(m => m.status === 'completed')
+                    || projectData.milestones[0];
+
                   // Calculate an overall percentage based on completed milestones, plus partial progress of current
                   const basePercentage = (completed / total) * 100;
                   const currentPartial = currentMilestone.status === 'current' ? ((currentMilestone.percentage || 0) / 100) * (100 / total) : 0;
@@ -422,7 +434,7 @@ function ProjectContent() {
                           </div>
                           <h3 className="text-2xl font-bold text-brand-dark mb-2">{currentMilestone.title}</h3>
                           <p className="text-gray-600 text-sm line-clamp-3 mb-6 leading-relaxed">{currentMilestone.description}</p>
-                          
+
                           <div className="mt-auto bg-gray-50 p-4 rounded-xl border border-gray-100">
                             <div className="flex justify-between text-xs font-bold text-brand-dark uppercase tracking-wider mb-2">
                               <span>Overall Project Status</span>
@@ -450,9 +462,9 @@ function ProjectContent() {
                 </h2>
                 <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
                   <div className="relative w-full overflow-hidden rounded-xl bg-gray-50 flex justify-center p-4">
-                    <img 
-                      src={projectData.images.floorPlan} 
-                      alt="Floor Plan" 
+                    <img
+                      src={projectData.images.floorPlan}
+                      alt="Floor Plan"
                       className="w-full max-w-4xl object-contain rounded-lg hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
                       onClick={() => {
                         // Open in new tab or add to lightbox if needed. For now, simple open in new tab.
@@ -477,14 +489,14 @@ function ProjectContent() {
                 <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3 flex items-center gap-2">
                   <ImageIcon className="text-brand-primary" size={24} /> Project Gallery
                 </h2>
-                
+
                 {/* Premium Collage Layout */}
                 <div className="grid grid-cols-4 md:grid-rows-2 gap-2 md:gap-3 md:h-[450px] lg:h-[550px] rounded-2xl overflow-hidden">
                   {projectData.images.gallery.slice(0, 5).map((imgUrl, idx) => {
                     const total = Math.min(projectData.images.gallery.length, 5);
                     const extraCount = projectData.images.gallery.length - 5;
                     const isLast = idx === 4;
-                    
+
                     let desktop = '';
                     if (total === 1) desktop = 'md:col-span-4 md:row-span-2';
                     else if (total === 2) desktop = 'md:col-span-2 md:row-span-2';
@@ -501,21 +513,21 @@ function ProjectContent() {
                       if (idx === 0) desktop = 'md:col-span-2 md:row-span-2';
                       else desktop = 'md:col-span-1 md:row-span-1';
                     }
-                    
+
                     const mobile = idx === 0 ? 'col-span-4 row-span-2 h-[250px] md:h-auto' : 'hidden md:block';
 
                     return (
-                      <div 
+                      <div
                         key={idx}
                         onClick={() => openLightbox(idx)}
                         className={`${mobile} ${desktop} relative group cursor-pointer overflow-hidden bg-gray-100`}
                       >
-                        <img 
-                          src={imgUrl} 
-                          alt={`Gallery Image ${idx + 1}`} 
-                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+                        <img
+                          src={imgUrl}
+                          alt={`Gallery Image ${idx + 1}`}
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                         />
-                        
+
                         {/* Hover Overlay */}
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center">
                           {isLast && extraCount > 0 ? (
@@ -546,12 +558,12 @@ function ProjectContent() {
                 <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3">Property Video Tour</h2>
                 <div className="rounded-xl overflow-hidden shadow-lg border border-gray-100 relative pt-[56.25%]">
                   {projectData.images.video.includes('youtube') || projectData.images.video.includes('youtu.be') ? (
-                    <iframe 
-                      src={getEmbedUrl(projectData.images.video)} 
-                      title="Property Video Tour" 
-                      className="absolute top-0 left-0 w-full h-full border-0 bg-black" 
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                      allowFullScreen 
+                    <iframe
+                      src={getEmbedUrl(projectData.images.video)}
+                      title="Property Video Tour"
+                      className="absolute top-0 left-0 w-full h-full border-0 bg-black"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
                     />
                   ) : (
                     <video src={projectData.images.video} controls className="absolute top-0 left-0 w-full h-full object-cover bg-black" />
@@ -579,18 +591,18 @@ function ProjectContent() {
                         <li className="flex justify-between border-b border-gray-50 pb-2"><span>Bathrooms</span> <span className="text-brand-dark font-bold">{unit.baths}</span></li>
                         <li className="flex justify-between border-b border-gray-50 pb-2"><span>Balcony</span> <span className="text-brand-dark font-bold">{unit.balconies}</span></li>
                         {unit.price && (
-                           <li className="flex justify-between pb-1">
-                             <span>Price</span> 
-                             <span className="text-brand-primary font-bold">
-                               {(() => {
-                                  const p = parsePriceTk(unit.price);
-                                  return p ? `৳ ${formatPriceBangladeshi(p)}` : unit.price;
-                               })()}
-                             </span>
-                           </li>
+                          <li className="flex justify-between pb-1">
+                            <span>Price</span>
+                            <span className="text-brand-primary font-bold">
+                              {(() => {
+                                const p = parsePriceTk(unit.price);
+                                return p ? `৳ ${formatPriceBangladeshi(p)}` : unit.price;
+                              })()}
+                            </span>
+                          </li>
                         )}
                         {!unit.price && (
-                           <li className="flex justify-between pb-1"><span>Price</span> <span className="text-brand-primary font-bold">On Request</span></li>
+                          <li className="flex justify-between pb-1"><span>Price</span> <span className="text-brand-primary font-bold">On Request</span></li>
                         )}
                       </ul>
                     </div>
@@ -617,7 +629,7 @@ function ProjectContent() {
                     </div>
                   );
                 })}
-                
+
                 {/* Render custom amenities */}
                 {projectData.customAmenities && projectData.customAmenities.map((amenity, idx) => {
                   const IconComponent = AVAILABLE_ICONS[amenity.icon] || CheckCircle;
@@ -652,9 +664,9 @@ function ProjectContent() {
                     ))}
                   </div>
                   <div className="p-8 bg-gray-100 flex justify-center items-center min-h-[400px]">
-                    <img 
-                      src={projectData.images.floorPlans[activeFloorPlan]} 
-                      alt={`Floor plan ${activeFloorPlan}`} 
+                    <img
+                      src={projectData.images.floorPlans[activeFloorPlan]}
+                      alt={`Floor plan ${activeFloorPlan}`}
                       className="max-w-full h-auto rounded shadow-lg"
                     />
                   </div>
@@ -672,10 +684,10 @@ function ProjectContent() {
                   <div className="w-full md:w-2/3 bg-white p-2 rounded-xl shadow-sm border border-gray-100">
                     <div className="relative h-80 rounded-lg overflow-hidden bg-gray-200">
                       <img src={projectData.images.map} alt="Map Location" className="w-full h-full object-cover" />
-                      <a 
-                        href={projectData.googleMapLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(projectData.location || projectData.name)}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
+                      <a
+                        href={projectData.googleMapLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(projectData.location || projectData.name)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="absolute inset-0 bg-brand-dark/20 hover:bg-brand-dark/40 transition-colors flex items-center justify-center group cursor-pointer"
                         title="Open in Google Maps"
                       >
@@ -712,7 +724,7 @@ function ProjectContent() {
                 <p className="text-sm text-brand-text/70 italic">Let us guide you to the extraordinary</p>
               </div>
               <p className="text-sm text-brand-text/80 mb-6 text-center">Share your details and our team will reach out to help you find your perfect home in {projectData.name}.</p>
-              
+
               {!isLoggedIn && (
                 <div className="bg-brand-primary/10 border border-brand-primary/20 p-4 mb-6 rounded text-xs text-brand-dark text-center">
                   <span className="font-semibold text-brand-primary">Have an account? </span>
@@ -725,27 +737,27 @@ function ProjectContent() {
 
               <form className="space-y-4" onSubmit={handleInquirySubmit}>
                 <div>
-                  <input type="text" required value={inquiryData.name} onChange={(e) => setInquiryData(p => ({...p, name: e.target.value}))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Full Name*" />
+                  <input type="text" required value={inquiryData.name} onChange={(e) => setInquiryData(p => ({ ...p, name: e.target.value }))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Full Name*" />
                 </div>
                 <div>
-                  <input type="tel" required value={inquiryData.phone} onChange={(e) => setInquiryData(p => ({...p, phone: e.target.value}))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Phone Number*" />
+                  <input type="tel" required value={inquiryData.phone} onChange={(e) => setInquiryData(p => ({ ...p, phone: e.target.value }))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Phone Number*" />
                 </div>
                 <div>
-                  <input type="email" required value={inquiryData.email} onChange={(e) => setInquiryData(p => ({...p, email: e.target.value}))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Email Address*" />
+                  <input type="email" required value={inquiryData.email} onChange={(e) => setInquiryData(p => ({ ...p, email: e.target.value }))} readOnly={isLoggedIn} className={`w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm ${isLoggedIn ? 'opacity-70 cursor-not-allowed' : ''}`} placeholder="Email Address*" />
                 </div>
                 <div>
-                  <textarea rows="4" required value={inquiryData.message} onChange={(e) => setInquiryData(p => ({...p, message: e.target.value}))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm resize-none" placeholder="Message*" />
+                  <textarea rows="4" required value={inquiryData.message} onChange={(e) => setInquiryData(p => ({ ...p, message: e.target.value }))} className="w-full p-4 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary transition-colors text-sm resize-none" placeholder="Message*" />
                 </div>
-                
+
                 <button type="submit" disabled={submittingInquiry} className="w-full bg-brand-primary flex items-center justify-center gap-2 text-white font-bold py-4 rounded hover:bg-brand-dark transition-colors shadow-lg mt-2 disabled:opacity-70">
                   {submittingInquiry && <Loader2 className="animate-spin" size={20} />}
                   {submittingInquiry ? 'Sending...' : 'Send A Message'}
                 </button>
 
                 <div className="mt-6 flex items-start gap-3 text-xs text-gray-500 leading-relaxed">
-                  <input 
-                    type="checkbox" 
-                    id="privacy-policy" 
+                  <input
+                    type="checkbox"
+                    id="privacy-policy"
                     checked={agreedToPolicy}
                     onChange={(e) => setAgreedToPolicy(e.target.checked)}
                     className="mt-0.5 w-4 h-4 shrink-0 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary focus:ring-2 cursor-pointer accent-brand-primary"
@@ -760,7 +772,7 @@ function ProjectContent() {
 
         </div>
       </div>
-      
+
       {/* Full-screen Lightbox */}
       <AnimatePresence>
         {lightboxOpen && projectData.images?.gallery && (
@@ -772,22 +784,22 @@ function ProjectContent() {
             onClick={closeLightbox}
           >
             <div className="absolute top-6 right-6 z-10">
-              <button 
+              <button
                 onClick={closeLightbox}
                 className="bg-white/10 hover:bg-white/20 text-white rounded-full p-2 backdrop-blur-sm transition-colors"
               >
                 <X size={28} />
               </button>
             </div>
-            
+
             <button
               onClick={handlePrevImage}
               className="absolute left-4 md:left-12 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors z-10"
             >
               <ChevronLeft size={36} />
             </button>
-            
-            <motion.div 
+
+            <motion.div
               key={lightboxIndex}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -796,20 +808,20 @@ function ProjectContent() {
               className="w-full max-w-5xl max-h-[85vh] px-4 flex items-center justify-center"
               onClick={(e) => e.stopPropagation()}
             >
-              <img 
-                src={projectData.images.gallery[lightboxIndex]} 
-                alt={`Gallery ${lightboxIndex + 1}`} 
+              <img
+                src={projectData.images.gallery[lightboxIndex]}
+                alt={`Gallery ${lightboxIndex + 1}`}
                 className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
               />
             </motion.div>
-            
+
             <button
               onClick={handleNextImage}
               className="absolute right-4 md:right-12 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 backdrop-blur-sm transition-colors z-10"
             >
               <ChevronRight size={36} />
             </button>
-            
+
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white font-medium tracking-widest text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">
               {lightboxIndex + 1} / {projectData.images.gallery.length}
             </div>
