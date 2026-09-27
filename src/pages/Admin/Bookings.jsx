@@ -645,36 +645,40 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
       await supabase.from('properties').update({ inventory, parking_inventory: parkingInventory }).eq('id', form.propertyId);
 
       // 3. Activity Log
-      await supabase.from('booking_activity_log').insert({
+      const { error: logError } = await supabase.from('booking_activity_log').insert({
         booking_id: newBookingId,
-        action: "Booking created",
-        detail: `Initial booking created by ${adminName}`,
-        performed_by: adminName
+        type: "Booking created",
+        message: `Initial booking created by ${adminName}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
+      if (logError) console.error("Error creating activity log:", logError);
 
       // 4. Generate scheduled payments
-      await supabase.from('booking_payments').insert({
+      const { error: tokenError } = await supabase.from('booking_payments').insert({
         booking_id: newBookingId,
         type: 'Token',
-        scheduled_date: new Date().toISOString(),
-        scheduled_amount: Number(form.tokenAmount),
+        due_date: new Date().toISOString().split('T')[0],
+        scheduled_amount: Number(form.tokenAmount) || 0,
         received_amount: 0,
         payment_mode: 'Cash',
         status: 'Scheduled',
         recorded_by: adminUid
       });
+      if (tokenError) console.error("Error creating token payment:", tokenError);
 
       if (Number(form.downPaymentAmount) > 0) {
-        await supabase.from('booking_payments').insert({
+        const { error: dpError } = await supabase.from('booking_payments').insert({
           booking_id: newBookingId,
           type: 'Down Payment',
-          scheduled_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           scheduled_amount: Number(form.downPaymentAmount),
           received_amount: 0,
           payment_mode: 'Cash',
           status: 'Scheduled',
           recorded_by: adminUid
         });
+        if (dpError) console.error("Error creating down payment:", dpError);
       }
 
       // Generate Installments if requested
@@ -689,17 +693,18 @@ function NewBookingModal({ onClose, properties, adminName, adminUid }) {
             ? (amountRemaining - (baseInstAmount * (count - 1))) 
             : baseInstAmount;
             
-          await supabase.from('booking_payments').insert({
+          const { error: instError } = await supabase.from('booking_payments').insert({
             booking_id: newBookingId,
             type: 'Installment',
             installment_number: i,
-            scheduled_date: new Date(currentDate).toISOString(),
+            due_date: new Date(currentDate).toISOString().split('T')[0],
             scheduled_amount: currentInstAmount,
             received_amount: 0,
             payment_mode: 'Cash',
             status: 'Scheduled',
             recorded_by: adminUid
           });
+          if (instError) console.error(`Error creating installment ${i}:`, instError);
 
           // Advance date
           switch (form.installmentFrequency) {
