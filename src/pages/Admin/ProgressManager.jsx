@@ -3,8 +3,41 @@ import { supabase } from '../../supabase';
 import { uploadMedia, deleteMedia, deleteMediaBeacon } from '../../utils/supabaseStorage';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
-import { CheckSquare, Clock, AlertCircle, Plus, Trash2, Save, X, Edit2, Upload, Loader2, Image as ImageIcon, ArrowLeft, ChevronDown, Building } from 'lucide-react';
+import { CheckSquare, Clock, AlertCircle, Plus, Trash2, Save, X, Edit2, Upload, Loader2, Image as ImageIcon, ArrowLeft, ChevronDown, Building, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useGlobalState } from '../../context/GlobalState';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+const SortableImageItem = ({ url, idx, removeImage }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: url });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1 : 0,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative inline-block group">
+      <div {...attributes} {...listeners} className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing"></div>
+      <img src={url} alt={`img ${idx}`} className="h-24 w-24 rounded-lg border shadow-sm object-cover" />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (window.confirm("Are you sure you want to remove this attached image?")) {
+            removeImage(url);
+          }
+        }}
+        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow z-10"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+};
 import AdminSidebar from '../../components/AdminSidebar';
 
 // Helper for simple unique ID since we don't want to rely on uuid package if not installed
@@ -12,7 +45,7 @@ const generateId = () => Math.random().toString(36).substring(2, 15);
 
 export default function ProgressManager() {
   const navigate = useNavigate();
-  const { properties, loadingProperties, adminUnsavedChanges, setAdminUnsavedChanges } = useGlobalState();
+  const { properties, loadingProperties, adminUnsavedChanges, setAdminUnsavedChanges, fetchProperties } = useGlobalState();
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   
@@ -58,16 +91,16 @@ export default function ProgressManager() {
   };
 
   const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
     setUploadingImage(true);
-    toast.info('Uploading milestone image...');
+    toast.info(`Uploading ${files.length} image(s)...`);
     try {
-      const publicUrl = await uploadMedia(file, 'milestone', selectedPropertyId);
-      setMilestoneForm(prev => ({ ...prev, images: [...(prev.images || []), publicUrl] }));
-      setNewlyUploadedImages(prev => [...prev, publicUrl]);
+      const urls = await Promise.all(files.map(file => uploadMedia(file, 'milestone', selectedPropertyId)));
+      setMilestoneForm(prev => ({ ...prev, images: [...(prev.images || []), ...urls] }));
+      setNewlyUploadedImages(prev => [...prev, ...urls]);
       setAdminUnsavedChanges(true);
-      toast.success('Image uploaded successfully!');
+      toast.success('Images uploaded successfully!');
     } catch (error) {
       toast.error(`Error uploading: ${error.message}`);
       console.error(error);
@@ -84,6 +117,28 @@ export default function ProgressManager() {
     // Queue for deletion (works for any storage URL)
     setImagesToDelete(prev => [...prev, urlToRemove]);
     setAdminUnsavedChanges(true);
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setMilestoneForm((prev) => {
+        const oldIndex = prev.images.indexOf(active.id);
+        const newIndex = prev.images.indexOf(over.id);
+        return {
+          ...prev,
+          images: arrayMove(prev.images, oldIndex, newIndex)
+        };
+      });
+      setAdminUnsavedChanges(true);
+    }
   };
 
   const handleSaveMilestone = async (e) => {
@@ -118,6 +173,8 @@ export default function ProgressManager() {
       }
       setNewlyUploadedImages([]); // committed, prevent unmount deletion
       
+      if (fetchProperties) await fetchProperties(); // Instantly update UI
+      
       toast.success(`Milestone ${editingMilestoneId ? 'updated' : 'added'} successfully!`);
       setEditingMilestoneId(null);
       setMilestoneForm({ id: '', date: '', title: '', description: '', status: 'upcoming', percentage: 0, images: [] });
@@ -146,6 +203,8 @@ export default function ProgressManager() {
         .update({ milestones: newMilestones })
         .eq('id', selectedPropertyId);
       if (error) throw error;
+      
+      if (fetchProperties) await fetchProperties(); // Instantly update UI
       toast.success('Milestone deleted.');
     } catch (error) {
       console.error(error);
@@ -340,29 +399,23 @@ export default function ProgressManager() {
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Attached Images</label>
                 <div className="flex flex-wrap gap-4 mb-4">
-                  {(milestoneForm.images || []).map((url, idx) => (
-                    <div key={idx} className="relative inline-block">
-                      <img src={url} alt={`Milestone img ${idx}`} className="h-24 w-24 rounded-lg border shadow-sm object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (window.confirm("Are you sure you want to remove this attached image?")) {
-                            handleRemoveImage(url);
-                          }
-                        }}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={milestoneForm.images || []} strategy={rectSortingStrategy}>
+                      {(milestoneForm.images || []).map((url, idx) => (
+                        <SortableImageItem key={url} url={url} idx={idx} removeImage={handleRemoveImage} />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 </div>
+                {milestoneForm.images && milestoneForm.images.length > 1 && (
+                  <p className="text-xs text-gray-500 mb-4 -mt-2">Drag and drop images to reorder them.</p>
+                )}
 
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded cursor-pointer transition-colors font-bold text-sm">
                     {uploadingImage ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                     {uploadingImage ? 'Uploading...' : 'Upload Image'}
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploadingImage} />
+                    <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" disabled={uploadingImage} />
                   </label>
                   <span className="text-xs text-gray-500">Supports JPG, PNG, WEBP. You can upload multiple.</span>
                 </div>

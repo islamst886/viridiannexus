@@ -168,7 +168,6 @@ function ProjectContent() {
         phone: inquiryData.phone,
         email: inquiryData.email,
         message: inquiryData.message,
-        property_id: projectData.id,
         property_name: projectData.name,
         source: 'Property Details Page',
         status: 'Unread'
