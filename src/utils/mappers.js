@@ -93,31 +93,40 @@ export function mapBookingFromDB(row) {
   if (!row) return null;
   return {
     id: row.id,
+    bookingRef: row.booking_ref,
     propertyId: row.property_id,
     propertyName: row.property_name,
+    propertyLocation: row.property_location,
+    inventoryId: row.inventory_id,
     clientName: row.client_name,
     clientEmail: row.client_email,
     clientPhone: row.client_phone,
+    clientNid: row.client_nid,
     clientAddress: row.client_address,
     linkedUserId: row.linked_user_id,
     unitNumber: row.unit_number,
     unitType: row.unit_type,
     floorNumber: row.floor_number,
     parkingSlot: row.parking_slot,
-    parkingPrice: row.parking_price,
-    totalPrice: row.total_price,
-    totalPaid: row.total_paid,
-    balanceDue: row.balance_due,
-    tokenAmount: row.token_amount,
-    downPaymentAmount: row.down_payment_amount,
+    parkingSpotIds: row.parking_spot_ids || [],
+    parkingIncluded: row.parking_included,
+    parkingPrice: Number(row.parking_price) || 0,
+    totalPrice: Number(row.total_price) || 0,
+    totalPaid: Number(row.total_paid) || 0,
+    balanceDue: Number(row.balance_due) || 0,
+    tokenAmount: Number(row.token_amount) || 0,
+    downPaymentAmount: Number(row.down_payment_amount) || 0,
     stage: row.stage,
     status: row.status,
     agreementDate: row.agreement_date,
     handoverDate: row.handover_date,
     notes: row.notes,
+    internalNotes: row.internal_notes,
+    installmentPlan: row.installment_plan,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
+    lastUpdatedBy: row.last_updated_by
   };
 }
 
@@ -125,15 +134,20 @@ export function mapBookingToDB(data) {
   return {
     property_id: data.propertyId,
     property_name: data.propertyName,
+    property_location: data.propertyLocation,
+    inventory_id: data.inventoryId,
     client_name: data.clientName,
     client_email: data.clientEmail,
     client_phone: data.clientPhone,
+    client_nid: data.clientNid || '',
     client_address: data.clientAddress,
     linked_user_id: data.linkedUserId || null,
     unit_number: data.unitNumber,
     unit_type: data.unitType,
     floor_number: data.floorNumber,
     parking_slot: data.parkingSlot || null,
+    parking_spot_ids: data.parkingSpotIds || [],
+    parking_included: data.parkingIncluded || null,
     parking_price: Number(data.parkingPrice) || 0,
     total_price: Number(data.totalPrice) || 0,
     total_paid: Number(data.totalPaid) || 0,
@@ -145,7 +159,11 @@ export function mapBookingToDB(data) {
     agreement_date: data.agreementDate || null,
     handover_date: data.handoverDate || null,
     notes: data.notes || '',
+    internal_notes: data.internalNotes || '',
+    installment_plan: data.installmentPlan || '',
+    booking_ref: data.bookingRef,
     created_by: data.createdBy || null,
+    last_updated_by: data.lastUpdatedBy || null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -158,12 +176,16 @@ export function mapPaymentFromDB(row) {
     id: row.id,
     bookingId: row.booking_id,
     type: row.type,
-    scheduledAmount: row.scheduled_amount,
-    receivedAmount: row.received_amount,
+    installmentNumber: row.installment_number,
+    scheduledAmount: Number(row.scheduled_amount) || 0,
+    receivedAmount: Number(row.received_amount) || 0,
     status: row.status,
     dueDate: row.due_date,
+    scheduledDate: row.due_date, // compatibility alias
     paidDate: row.paid_date,
-    notes: row.notes,
+    paymentMode: row.payment_mode || '',
+    recordedBy: row.recorded_by,
+    notes: row.notes || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -177,11 +199,15 @@ export function mapActivityFromDB(row) {
     id: row.id,
     bookingId: row.booking_id,
     type: row.type,
+    action: row.type, // compatibility alias
     message: row.message,
+    detail: row.message, // compatibility alias
     actorId: row.actor_id,
     actorName: row.actor_name,
+    performedBy: row.actor_name, // compatibility alias
     metadata: row.metadata || {},
     createdAt: row.created_at,
+    performedAt: row.created_at, // compatibility alias
   };
 }
 

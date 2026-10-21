@@ -49,36 +49,53 @@ export default function CancelBookingModal({ isOpen, onClose, booking, adminName
           }).eq('id', booking.propertyId);
         }
         
-        await supabase.from('bookings').update({
+        const cancelTime = new Date().toISOString();
+        const cancelNoteEntry = `[Cancelled by ${adminName} on ${cancelTime.split('T')[0]}]: ${reason.trim()}`;
+        const prevNotes = booking.internalNotes || booking.internal_notes || '';
+        const updatedInternalNotes = prevNotes ? `${prevNotes}\n${cancelNoteEntry}` : cancelNoteEntry;
+
+        const { error: bError } = await supabase.from('bookings').update({
           status: 'Cancelled',
           stage: 'Cancelled',
-          cancellation_note: reason.trim(),
-          cancellation_date: new Date().toISOString(),
-          cancelled_by: adminName,
-          last_updated_by: adminUid
+          internal_notes: updatedInternalNotes,
+          last_updated_by: adminUid,
+          updated_at: cancelTime
         }).eq('id', booking.id);
+        if (bError) throw bError;
       } else {
-        await supabase.from('bookings').update({
+        const cancelTime = new Date().toISOString();
+        const cancelNoteEntry = `[Cancelled by ${adminName} on ${cancelTime.split('T')[0]}]: ${reason.trim()}`;
+        const prevNotes = booking.internalNotes || booking.internal_notes || '';
+        const updatedInternalNotes = prevNotes ? `${prevNotes}\n${cancelNoteEntry}` : cancelNoteEntry;
+
+        const { error: bError } = await supabase.from('bookings').update({
           status: 'Cancelled',
-          cancellation_note: reason.trim(),
-          cancellation_date: new Date().toISOString(),
-          cancelled_by: adminName,
-          last_updated_by: adminUid
+          stage: 'Cancelled',
+          internal_notes: updatedInternalNotes,
+          last_updated_by: adminUid,
+          updated_at: cancelTime
         }).eq('id', booking.id);
+        if (bError) throw bError;
       }
 
       await supabase.from('booking_activity_log').insert({
         booking_id: booking.id,
-        action: "Booking Cancelled",
-        detail: `Booking cancelled. Reason: ${reason.trim()} (Assigned unit released to Available)`,
-        performed_by: adminName
+        type: "Booking Cancelled",
+        message: `Booking cancelled by ${adminName}. Reason: ${reason.trim()} (Assigned unit released to Available)`,
+        actor_name: adminName,
+        actor_id: adminUid,
+        metadata: {
+          reason: reason.trim(),
+          cancelledBy: adminName,
+          cancellationDate: new Date().toISOString()
+        }
       });
 
       toast.success('Booking cancelled successfully.');
-      onSuccess();
+      onSuccess?.();
     } catch (error) {
       console.error(error);
-      toast.error("Failed to cancel booking");
+      toast.error(`Failed to cancel booking: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }

@@ -8,6 +8,7 @@ import { supabase } from '../supabase';
 import { toast } from 'react-toastify';
 import { Loader2 } from 'lucide-react';
 import FloatingWhatsApp from './FloatingWhatsApp';
+import WhatsAppIcon from './WhatsAppIcon';
 
 export default function Layout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -269,6 +270,17 @@ export default function Layout() {
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                       <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.377.55a3.016 3.016 0 0 0-2.122 2.136C0 8.07 0 12 0 12s0 3.93.498 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.55 9.377.55 9.377.55s7.505 0 9.377-.55a3.016 3.016 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                     </svg>
+                  </a>
+                )}
+                {siteSettings?.whatsappNumber && (
+                  <a
+                    href={`https://wa.me/${siteSettings.whatsappNumber.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-neutral/60 hover:text-[#25D366] transition-colors"
+                    aria-label="WhatsApp"
+                  >
+                    <WhatsAppIcon size={20} />
                   </a>
                 )}
               </div>

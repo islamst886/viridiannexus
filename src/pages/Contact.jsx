@@ -4,9 +4,10 @@ import { supabase } from '../supabase';
 import { toast } from 'react-toastify';
 import { useGlobalState } from '../context/GlobalState';
 import { Link, useLocation } from 'react-router-dom';
+import WhatsAppIcon from '../components/WhatsAppIcon';
 
 export default function Contact() {
-  const { isLoggedIn, userProfile } = useGlobalState();
+  const { isLoggedIn, userProfile, siteSettings } = useGlobalState();
   const location = useLocation();
 
   const searchParams = new URLSearchParams(location.search);
@@ -136,6 +137,23 @@ export default function Contact() {
                 <p className="opacity-80">veridiannexusdev@gmail.com</p>
               </div>
             </div>
+
+            {siteSettings?.whatsappNumber && (
+              <div className="flex items-start gap-4">
+                <WhatsAppIcon size={24} className="text-[#25D366] shrink-0 mt-1" />
+                <div>
+                  <h4 className="font-bold text-brand-accent">WhatsApp VIP Desk</h4>
+                  <a
+                    href={`https://wa.me/${siteSettings.whatsappNumber.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="opacity-80 hover:text-white hover:underline transition-colors block"
+                  >
+                    +{siteSettings.whatsappNumber.replace(/\D/g, '')}
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

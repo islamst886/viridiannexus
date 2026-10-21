@@ -115,23 +115,25 @@ export default function ChangeParkingModal({ isOpen, onClose, booking, onComplet
       await supabase.from('bookings').update({
         parking_spot_ids: finalSpotIds,
         parking_included: parkingDisplayStr,
-        last_updated_by: adminUid
+        last_updated_by: adminUid,
+        updated_at: new Date().toISOString()
       }).eq('id', booking.id);
       
       // 4. Activity Log
       await supabase.from('booking_activity_log').insert({
         booking_id: booking.id,
-        action: 'Parking Swapped',
-        detail: `Exchanged spots: Given up [${releasedLabels.join(', ')}], Claimed [${claimedLabels.join(', ')}]. No price adjustment required. Reason: ${notes}`,
-        performed_by: adminName
+        type: 'Parking Swapped',
+        message: `Exchanged spots: Given up [${releasedLabels.join(', ')}], Claimed [${claimedLabels.join(', ')}]. No price adjustment required.${notes ? ` Reason: ${notes}` : ''}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
 
       toast.success('Parking spots successfully swapped.');
-      onComplete();
+      onComplete?.();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error(`Failed to swap parking: ${err.message}`);
+      toast.error(`Failed to swap parking: ${err.message || 'Unknown error'}`);
     } finally {
       setSubmitting(false);
     }

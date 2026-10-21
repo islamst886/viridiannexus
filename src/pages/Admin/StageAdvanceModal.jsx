@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 export default function StageAdvanceModal({ 
   isOpen, 
   onClose, 
+  onSuccess,
   booking, 
   payments, 
   initialTargetStage,
@@ -63,39 +64,66 @@ export default function StageAdvanceModal({
     try {
       const updates = {
         stage: targetStage,
-        last_updated_by: adminUid
+        last_updated_by: adminUid,
+        updated_at: new Date().toISOString()
       };
 
-      // Include stage metadata if applicable
+      // Include stage metadata if applicable without breaking database schema
       if (targetStage === 'Agreement Signed') {
         updates.agreement_date = agreementDate;
-        if (agreementRef) updates.agreement_ref = agreementRef;
+        if (agreementRef) {
+          const prevNotes = booking.internalNotes || booking.internal_notes || '';
+          updates.internal_notes = prevNotes ? `${prevNotes}\n[Agreement Ref: ${agreementRef.trim()}]` : `[Agreement Ref: ${agreementRef.trim()}]`;
+        }
       } else if (targetStage === 'Handover' || targetStage === 'Completed') {
         updates.handover_date = handoverDate;
-        updates.handover_recipient = handoverRecipient;
-        if (handoverNotes) updates.handover_notes = handoverNotes;
+        const details = [];
+        if (handoverRecipient) details.push(`Keys delivered to: ${handoverRecipient.trim()}`);
+        if (handoverNotes) details.push(`Handover notes: ${handoverNotes.trim()}`);
+        if (details.length > 0) {
+          const prevNotes = booking.internalNotes || booking.internal_notes || '';
+          updates.internal_notes = prevNotes ? `${prevNotes}\n[${details.join(' | ')}]` : `[${details.join(' | ')}]`;
+        }
       }
 
-      await supabase.from('bookings').update(updates).eq('id', booking.id);
+      const { error: updateError } = await supabase.from('bookings').update(updates).eq('id', booking.id);
+      if (updateError) throw updateError;
 
-      // Log in activity log
+      // Log in activity log using valid Supabase schema
       const isOverride = !evaluation.allowed && isSuperAdmin && overrideAuthorized;
-      await supabase.from('booking_activity_log').insert({
+      const logType = isOverride ? "Stage Override (Super Admin)" : isRollback ? "Stage Rolled Back" : "Stage Advanced";
+      const logMessage = isOverride 
+        ? `Stage forcibly set from "${booking.stage}" to "${targetStage}" by ${adminName}. Justification: ${overrideReason.trim()}`
+        : isRollback
+        ? `Stage reverted from "${booking.stage}" to "${targetStage}" by ${adminName}`
+        : `Stage advanced from "${booking.stage}" to "${targetStage}" by ${adminName}`;
+
+      const { error: logError } = await supabase.from('booking_activity_log').insert({
         booking_id: booking.id,
-        action: isOverride ? "Stage Override (Super Admin)" : isRollback ? "Stage Rolled Back" : "Stage Advanced",
-        detail: isOverride 
-          ? `Stage forcibly set from "${booking.stage}" to "${targetStage}". Justification: ${overrideReason.trim()}`
-          : isRollback
-          ? `Stage reverted from "${booking.stage}" to "${targetStage}"`
-          : `Stage advanced from "${booking.stage}" to "${targetStage}"`,
-        performed_by: adminName
+        type: logType,
+        message: logMessage,
+        actor_name: adminName,
+        actor_id: adminUid,
+        metadata: {
+          previousStage: booking.stage,
+          targetStage,
+          isOverride,
+          overrideReason: isOverride ? overrideReason.trim() : null,
+          agreementDate: targetStage === 'Agreement Signed' ? agreementDate : null,
+          agreementRef: agreementRef || null,
+          handoverDate: (targetStage === 'Handover' || targetStage === 'Completed') ? handoverDate : null,
+          handoverRecipient: handoverRecipient || null,
+          handoverNotes: handoverNotes || null
+        }
       });
+      if (logError) console.error("Error creating stage activity log:", logError);
 
       toast.success(isOverride ? "Stage updated with Super Admin override" : `Stage updated to ${targetStage}`);
+      onSuccess?.();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to update booking stage");
+      toast.error(`Failed to update booking stage: ${err.message || 'Unknown error'}`);
     } finally {
       setSubmitting(false);
     }

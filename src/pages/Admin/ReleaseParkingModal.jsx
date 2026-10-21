@@ -77,15 +77,17 @@ export default function ReleaseParkingModal({ isOpen, onClose, booking, onComple
         parking_included: null,
         total_price: newTotalPrice,
         balance_due: newBalanceDue,
-        last_updated_by: adminUid
+        last_updated_by: adminUid,
+        updated_at: new Date().toISOString()
       }).eq('id', booking.id);
       
       // 3. Activity Log
       await supabase.from('booking_activity_log').insert({
         booking_id: booking.id,
-        action: 'Parking Released & Price Adjusted',
-        detail: `Parking spots [${(booking.parkingSpotIds || []).join(', ')}] released. Total price reduced by ৳${deduct.toLocaleString('en-IN')}. Reason: ${notes}`,
-        performed_by: adminName
+        type: 'Parking Released & Price Adjusted',
+        message: `Parking spots [${(booking.parkingSpotIds || []).join(', ')}] released. Total price reduced by ৳${deduct.toLocaleString('en-IN')}.${notes ? ` Reason: ${notes}` : ''}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
 
       // 4. Adjust Ledger (Create a credit note)
@@ -93,20 +95,19 @@ export default function ReleaseParkingModal({ isOpen, onClose, booking, onComple
         await supabase.from('booking_payments').insert({
           booking_id: booking.id,
           type: 'Credit Note (Parking Removed)',
-          scheduled_date: new Date().toISOString(),
-          paid_date: new Date().toISOString(),
+          due_date: new Date().toISOString().split('T')[0],
+          paid_date: new Date().toISOString().split('T')[0],
           scheduled_amount: -deduct,
           received_amount: -deduct,
           payment_mode: 'System',
-          reference_number: 'PARKING-RELEASE',
           status: 'Paid',
-          note: 'Automatic deduction for releasing parking spots.',
+          notes: `Automatic deduction for releasing parking spots.${notes ? ` Note: ${notes}` : ''}`,
           recorded_by: adminUid
         });
       }
 
       toast.success('Parking spots released and pricing updated successfully.');
-      onComplete();
+      onComplete?.();
       onClose();
     } catch (err) {
       console.error(err);

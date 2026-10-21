@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../supabase';
-import { Save, Loader2, MessageCircle } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
 import { useGlobalState } from '../../context/GlobalState';
+import WhatsAppIcon from '../../components/WhatsAppIcon';
 
 export default function SiteSettings() {
   const { userProfile, isSuperAdmin } = useGlobalState();
@@ -166,7 +167,7 @@ export default function SiteSettings() {
 
               <div className="pt-4 border-t border-gray-100">
                 <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
-                  <MessageCircle size={18} className="text-green-500" /> WhatsApp Number
+                  <WhatsAppIcon size={18} className="text-[#25D366]" /> WhatsApp Number
                 </label>
                 <p className="text-xs text-gray-500 mb-2">Include country code without the plus sign (e.g., 8801712345678). This powers the floating WhatsApp button.</p>
                 <input

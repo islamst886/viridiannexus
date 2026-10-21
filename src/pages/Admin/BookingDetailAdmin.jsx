@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import AdminSidebar from '../../components/AdminSidebar';
@@ -8,6 +8,7 @@ import {
   DollarSign, Loader2, Save, User as UserIcon, Building, ShieldCheck, X, RefreshCw, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { mapBookingFromDB, mapPaymentFromDB, mapActivityFromDB } from '../../utils/mappers';
 import StageAdvanceModal from './StageAdvanceModal';
 import CancelBookingModal from './CancelBookingModal';
 import ReleaseParkingModal from './ReleaseParkingModal';
@@ -50,14 +51,16 @@ export default function AdminBookingDetail() {
   const [linkedUser, setLinkedUser] = useState(null);
   const [syncingProfile, setSyncingProfile] = useState(false);
 
+  const linkedId = booking?.linkedUserId || booking?.linked_user_id;
+
   useEffect(() => {
-    if (!booking?.linked_user_id) {
+    if (!linkedId) {
       setLinkedUser(null);
       return;
     }
 
     const fetchUser = async () => {
-      const { data } = await supabase.from('profiles').select('*').eq('id', booking.linked_user_id).single();
+      const { data } = await supabase.from('profiles').select('*').eq('id', linkedId).single();
       if (data) {
         setLinkedUser({ 
           id: data.id, 
@@ -71,7 +74,7 @@ export default function AdminBookingDetail() {
       }
     };
     fetchUser();
-  }, [booking?.linked_user_id]);
+  }, [linkedId]);
 
   const profileDifferences = React.useMemo(() => {
     if (!booking || !linkedUser) return [];
@@ -100,6 +103,67 @@ export default function AdminBookingDetail() {
     return diffs;
   }, [booking, linkedUser]);
 
+  const fetchBooking = useCallback(async () => {
+    const { data, error } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
+    if (error || !data) {
+      toast.error('Booking not found');
+      navigate('/admin/bookings');
+      return;
+    }
+    setBooking(mapBookingFromDB(data));
+    setLoading(false);
+  }, [bookingId, navigate]);
+
+  const fetchPayments = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('booking_payments')
+      .select('*')
+      .eq('booking_id', bookingId)
+      .order('due_date', { ascending: true })
+      .order('installment_number', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching payments:', error);
+    }
+    if (data) {
+      setPayments(data.map(mapPaymentFromDB));
+    }
+  }, [bookingId]);
+
+  const fetchActivity = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('booking_activity_log')
+      .select('*')
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching activity log:', error);
+    }
+    if (data) {
+      setActivity(data.map(mapActivityFromDB));
+    }
+  }, [bookingId]);
+
+  const refreshAll = useCallback(() => {
+    fetchBooking();
+    fetchPayments();
+    fetchActivity();
+  }, [fetchBooking, fetchPayments, fetchActivity]);
+
+  useEffect(() => {
+    refreshAll();
+
+    const sub = supabase.channel(`booking_detail_${bookingId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `id=eq.${bookingId}` }, fetchBooking)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_payments', filter: `booking_id=eq.${bookingId}` }, fetchPayments)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_activity_log', filter: `booking_id=eq.${bookingId}` }, fetchActivity)
+      .subscribe();
+
+    return () => supabase.removeChannel(sub);
+  }, [bookingId, fetchBooking, fetchPayments, fetchActivity, refreshAll]);
+
   const handleSyncWithUserProfile = async () => {
     if (!linkedUser || !booking) return;
     setSyncingProfile(true);
@@ -110,19 +174,23 @@ export default function AdminBookingDetail() {
         client_email: linkedUser.email || booking.clientEmail,
         client_nid: linkedUser.nid || booking.clientNid || '',
         client_address: linkedUser.address || booking.clientAddress || '',
-        last_updated_by: adminUid
+        last_updated_by: adminUid,
+        updated_at: new Date().toISOString()
       };
 
-      await supabase.from('bookings').update(updates).eq('id', bookingId);
+      const { error: bErr } = await supabase.from('bookings').update(updates).eq('id', bookingId);
+      if (bErr) throw bErr;
 
       await supabase.from('booking_activity_log').insert({
         booking_id: bookingId,
-        action: "Client Details Synced",
-        detail: `Client details synchronized with linked user account (${linkedUser.email}) by ${adminName}`,
-        performed_by: adminName
+        type: "Client Details Synced",
+        message: `Client details synchronized with linked user account (${linkedUser.email}) by ${adminName}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
 
       toast.success("Client details synchronized with user profile!");
+      refreshAll();
     } catch (err) {
       console.error(err);
       toast.error("Failed to sync client details.");
@@ -131,103 +199,28 @@ export default function AdminBookingDetail() {
     }
   };
 
-  useEffect(() => {
-    const fetchBooking = async () => {
-      const { data, error } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
-      if (error || !data) {
-        toast.error('Booking not found');
-        navigate('/admin/bookings');
-        return;
-      }
-      setBooking({
-        id: data.id,
-        bookingRef: data.booking_ref,
-        clientName: data.client_name,
-        clientPhone: data.client_phone,
-        clientEmail: data.client_email,
-        clientNid: data.client_nid,
-        clientAddress: data.client_address,
-        linkedUserId: data.linked_user_id,
-        propertyName: data.property_name,
-        propertyLocation: data.property_location,
-        propertyId: data.property_id,
-        inventoryId: data.inventory_id,
-        unitType: data.unit_type,
-        unitNumber: data.unit_number,
-        parkingIncluded: data.parking_included,
-        totalPrice: data.total_price,
-        totalPaid: data.total_paid,
-        balanceDue: data.balance_due,
-        stage: data.stage,
-        status: data.status,
-        createdAt: data.created_at,
-        cancellationDate: data.cancellation_date,
-        cancelledBy: data.cancelled_by,
-        cancellationNote: data.cancellation_note
-      });
-      setLoading(false);
-    };
-
-    const fetchPayments = async () => {
-      const { data } = await supabase.from('booking_payments').select('*').eq('booking_id', bookingId).order('scheduled_date', { ascending: true });
-      if (data) {
-        setPayments(data.map(d => ({
-          id: d.id,
-          type: d.type,
-          installmentNumber: d.installment_number,
-          scheduledDate: d.scheduled_date,
-          scheduledAmount: d.scheduled_amount,
-          status: d.status,
-          receivedAmount: d.received_amount,
-          paymentMode: d.payment_mode
-        })));
-      }
-    };
-
-    const fetchActivity = async () => {
-      const { data } = await supabase.from('booking_activity_log').select('*').eq('booking_id', bookingId).order('created_at', { ascending: false });
-      if (data) {
-        setActivity(data.map(d => ({
-          id: d.id,
-          action: d.action,
-          detail: d.detail,
-          performedBy: d.performed_by,
-          performedAt: d.created_at
-        })));
-      }
-    };
-
-    fetchBooking();
-    fetchPayments();
-    fetchActivity();
-
-    const sub = supabase.channel(`booking_detail_${bookingId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `id=eq.${bookingId}` }, fetchBooking)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_payments', filter: `booking_id=eq.${bookingId}` }, fetchPayments)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_activity_log', filter: `booking_id=eq.${bookingId}` }, fetchActivity)
-      .subscribe();
-
-    return () => supabase.removeChannel(sub);
-  }, [bookingId, navigate]);
-
   const handleStatusChange = async (newStatus) => {
     const actionText = newStatus === 'On Hold' ? 'put this booking on hold' : 'resume this booking';
                        
     if (!window.confirm(`Are you sure you want to ${actionText}?`)) return;
     
     try {
-      await supabase.from('bookings').update({
+      const { error: bErr } = await supabase.from('bookings').update({
         status: newStatus,
-        last_updated_by: adminUid
+        last_updated_by: adminUid,
+        updated_at: new Date().toISOString()
       }).eq('id', bookingId);
+      if (bErr) throw bErr;
 
       await supabase.from('booking_activity_log').insert({
         booking_id: bookingId,
-        action: "Status Changed",
-        detail: `Booking status changed to ${newStatus}`,
-        performed_by: adminName
+        type: "Status Changed",
+        message: `Booking status changed to ${newStatus} by ${adminName}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
       toast.success(`Booking ${newStatus === 'On Hold' ? 'put on hold' : 'resumed'}`);
+      refreshAll();
     } catch (error) {
       console.error(error);
       toast.error("Failed to update status");
@@ -329,23 +322,30 @@ export default function AdminBookingDetail() {
 
         <main className="flex-1 overflow-auto p-8 flex flex-col gap-6">
           
-          {booking.status === 'Cancelled' && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-6 shadow-sm flex items-start gap-4">
-              <div className="bg-red-100 text-red-600 p-3 rounded-full shrink-0">
-                <AlertTriangle size={24} />
-              </div>
-              <div className="flex-1">
-                <h2 className="text-red-800 font-bold text-lg mb-1">Booking Cancelled</h2>
-                <p className="text-red-700 text-sm mb-3">
-                  This booking was cancelled on <span className="font-semibold">{formatDate(booking.cancellationDate)}</span> by <span className="font-semibold">{booking.cancelledBy || 'an admin'}</span>.
-                </p>
-                <div className="bg-white/80 border border-red-100 rounded-lg p-4 text-sm text-gray-800 shadow-sm relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-red-300 before:rounded-l-lg">
-                  <strong className="block text-xs text-red-800 uppercase font-bold mb-1 tracking-wider">Cancellation Note</strong>
-                  <span className="italic">"{booking.cancellationNote || 'No reason provided.'}"</span>
+          {booking.status === 'Cancelled' && (() => {
+            const cancelLog = activity.find(a => a.type === 'Booking Cancelled' || a.action === 'Booking Cancelled');
+            const cancelDate = cancelLog?.createdAt || cancelLog?.performedAt || booking.updatedAt;
+            const cancelledBy = cancelLog?.actorName || cancelLog?.performedBy || 'an admin';
+            const cancellationNote = cancelLog?.metadata?.reason || cancelLog?.message || cancelLog?.detail || booking.internalNotes || 'No reason provided.';
+
+            return (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-6 shadow-sm flex items-start gap-4">
+                <div className="bg-red-100 text-red-600 p-3 rounded-full shrink-0">
+                  <AlertTriangle size={24} />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-red-800 font-bold text-lg mb-1">Booking Cancelled</h2>
+                  <p className="text-red-700 text-sm mb-3">
+                    This booking was cancelled on <span className="font-semibold">{formatDate(cancelDate)}</span> by <span className="font-semibold">{cancelledBy}</span>.
+                  </p>
+                  <div className="bg-white/80 border border-red-100 rounded-lg p-4 text-sm text-gray-800 shadow-sm relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-red-300 before:rounded-l-lg">
+                    <strong className="block text-xs text-red-800 uppercase font-bold mb-1 tracking-wider">Cancellation Note</strong>
+                    <span className="italic">"{cancellationNote}"</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             
@@ -629,6 +629,7 @@ export default function AdminBookingDetail() {
           bookingId={bookingId}
           adminName={adminName}
           adminUid={adminUid}
+          onSuccess={refreshAll}
           onClose={() => setIsPaymentModalOpen(false)}
         />
       )}
@@ -639,6 +640,7 @@ export default function AdminBookingDetail() {
           bookingId={bookingId}
           adminName={adminName}
           adminUid={adminUid}
+          onSuccess={refreshAll}
           onClose={() => setIsCustomPaymentModalOpen(false)}
         />
       )}
@@ -649,6 +651,7 @@ export default function AdminBookingDetail() {
           booking={booking}
           adminName={adminName}
           adminUid={adminUid}
+          onSuccess={refreshAll}
           onClose={() => setIsEditClientModalOpen(false)}
         />
       )}
@@ -659,6 +662,7 @@ export default function AdminBookingDetail() {
           booking={booking}
           adminName={adminName}
           adminUid={adminUid}
+          onSuccess={refreshAll}
           onClose={() => setIsChangeUnitModalOpen(false)}
         />
       )}
@@ -668,6 +672,7 @@ export default function AdminBookingDetail() {
         <StageAdvanceModal
           isOpen={isStageModalOpen}
           onClose={() => setIsStageModalOpen(false)}
+          onSuccess={refreshAll}
           booking={booking}
           payments={payments}
           initialTargetStage={targetStageCandidate}
@@ -683,35 +688,47 @@ export default function AdminBookingDetail() {
         booking={booking}
         adminName={adminName}
         adminUid={adminUid}
-        onSuccess={() => setIsCancelModalOpen(false)}
+        onSuccess={() => {
+          setIsCancelModalOpen(false);
+          refreshAll();
+        }}
       />
       
       <ReleaseParkingModal
         isOpen={isReleaseParkingModalOpen}
         onClose={() => setIsReleaseParkingModalOpen(false)}
         booking={booking}
-        onComplete={() => setIsReleaseParkingModalOpen(false)}
+        onComplete={() => {
+          setIsReleaseParkingModalOpen(false);
+          refreshAll();
+        }}
       />
 
       <AddParkingModal
         isOpen={isAddParkingModalOpen}
         onClose={() => setIsAddParkingModalOpen(false)}
         booking={booking}
-        onComplete={() => setIsAddParkingModalOpen(false)}
+        onComplete={() => {
+          setIsAddParkingModalOpen(false);
+          refreshAll();
+        }}
       />
 
       <ChangeParkingModal
         isOpen={isChangeParkingModalOpen}
         onClose={() => setIsChangeParkingModalOpen(false)}
         booking={booking}
-        onComplete={() => setIsChangeParkingModalOpen(false)}
+        onComplete={() => {
+          setIsChangeParkingModalOpen(false);
+          refreshAll();
+        }}
       />
     </div>
   );
 }
 
 // Payment Modal Component
-function PaymentModal({ payment, bookingId, adminName, adminUid, onClose }) {
+function PaymentModal({ payment, bookingId, adminName, adminUid, onSuccess, onClose }) {
   const [amount, setAmount] = useState(payment.scheduledAmount);
   const [mode, setMode] = useState('Bank Transfer');
   const [ref, setRef] = useState('');
@@ -731,22 +748,26 @@ function PaymentModal({ payment, bookingId, adminName, adminUid, onClose }) {
     try {
       const numAmount = Number(amount);
       const isFull = numAmount >= payment.scheduledAmount;
+      const paymentNotes = ref ? (note ? `Ref: ${ref} | ${note}` : `Ref: ${ref}`) : (note || null);
       
       // Update Payment Doc
-      await supabase.from('booking_payments').update({
+      const { error: pErr } = await supabase.from('booking_payments').update({
         received_amount: numAmount,
         payment_mode: mode,
-        reference_number: ref,
-        note: note,
+        notes: paymentNotes,
         status: isFull ? 'Paid' : 'Partially Paid',
-        paid_date: new Date().toISOString(),
-        recorded_by: adminUid
+        paid_date: new Date().toISOString().split('T')[0],
+        recorded_by: adminUid,
+        updated_at: new Date().toISOString()
       }).eq('id', payment.id);
+      if (pErr) throw pErr;
 
       // Update Booking Totals
       const { data: bookingDoc, error: bErr } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
       if (!bErr && bookingDoc) {
-        const newTotalPaid = (Number(bookingDoc.total_paid) || 0) + numAmount;
+        const prevReceived = Number(payment.receivedAmount || 0);
+        const delta = Math.max(0, numAmount - prevReceived);
+        const newTotalPaid = (Number(bookingDoc.total_paid) || 0) + delta;
         const newBalance = Math.max(0, Number(bookingDoc.total_price) - newTotalPaid);
         
         let nextStage = bookingDoc.stage;
@@ -769,23 +790,26 @@ function PaymentModal({ payment, bookingId, adminName, adminUid, onClose }) {
           total_paid: newTotalPaid,
           balance_due: newBalance,
           stage: nextStage,
-          last_updated_by: adminUid
+          last_updated_by: adminUid,
+          updated_at: new Date().toISOString()
         }).eq('id', bookingId);
       }
 
-      // Log
+      // Log activity
       await supabase.from('booking_activity_log').insert({
         booking_id: bookingId,
-        action: "Payment Recorded",
-        detail: `${payment.type} payment of ৳${numAmount.toLocaleString()} received via ${mode}`,
-        performed_by: adminName
+        type: "Payment Recorded",
+        message: `${payment.type} payment of ৳${numAmount.toLocaleString('en-IN')} received via ${mode}${ref ? ` (Ref: ${ref})` : ''}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
 
       toast.success("Payment recorded successfully");
+      onSuccess?.();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to record payment");
+      toast.error(`Failed to record payment: ${err.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -832,7 +856,7 @@ function PaymentModal({ payment, bookingId, adminName, adminUid, onClose }) {
 }
 
 // Custom Payment Modal Component
-function CustomPaymentModal({ bookingId, adminName, adminUid, onClose }) {
+function CustomPaymentModal({ bookingId, adminName, adminUid, onSuccess, onClose }) {
   const [type, setType] = useState('Custom Installment');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -848,15 +872,17 @@ function CustomPaymentModal({ bookingId, adminName, adminUid, onClose }) {
       const numAmount = Number(amount);
       
       // Create new scheduled payment
-      await supabase.from('booking_payments').insert({
+      const { error: pInsertErr } = await supabase.from('booking_payments').insert({
         booking_id: bookingId,
         type: type,
         scheduled_amount: numAmount,
-        scheduled_date: new Date(dueDate).toISOString(),
+        due_date: new Date(dueDate).toISOString().split('T')[0],
         status: 'Scheduled',
         received_amount: 0,
+        payment_mode: 'Cash',
         recorded_by: adminUid
       });
+      if (pInsertErr) throw pInsertErr;
 
       // Update Booking Total Price
       const { data: bookingDoc, error: bErr } = await supabase.from('bookings').select('*').eq('id', bookingId).single();
@@ -867,23 +893,26 @@ function CustomPaymentModal({ bookingId, adminName, adminUid, onClose }) {
         await supabase.from('bookings').update({
           total_price: newTotalPrice,
           balance_due: newBalance,
-          last_updated_by: adminUid
+          last_updated_by: adminUid,
+          updated_at: new Date().toISOString()
         }).eq('id', bookingId);
       }
 
       // Log
       await supabase.from('booking_activity_log').insert({
         booking_id: bookingId,
-        action: "Custom Payment Added",
-        detail: `Added ${type} for ৳${numAmount.toLocaleString()}`,
-        performed_by: adminName
+        type: "Custom Payment Added",
+        message: `Added ${type} for ৳${numAmount.toLocaleString('en-IN')}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
 
       toast.success("Custom payment scheduled successfully");
+      onSuccess?.();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to add custom payment");
+      toast.error(`Failed to add custom payment: ${err.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -921,7 +950,7 @@ function CustomPaymentModal({ bookingId, adminName, adminUid, onClose }) {
 }
 
 // Edit Client Modal Component
-function EditClientModal({ booking, adminName, adminUid, onClose }) {
+function EditClientModal({ booking, adminName, adminUid, onSuccess, onClose }) {
   const [formData, setFormData] = useState({
     clientName: booking.clientName || '',
     clientPhone: booking.clientPhone || '',
@@ -936,27 +965,31 @@ function EditClientModal({ booking, adminName, adminUid, onClose }) {
     setLoading(true);
 
     try {
-      await supabase.from('bookings').update({
+      const { error: bErr } = await supabase.from('bookings').update({
         client_name: formData.clientName,
         client_phone: formData.clientPhone,
         client_email: formData.clientEmail,
         client_nid: formData.clientNid,
         client_address: formData.clientAddress,
-        last_updated_by: adminUid
+        last_updated_by: adminUid,
+        updated_at: new Date().toISOString()
       }).eq('id', booking.id);
+      if (bErr) throw bErr;
 
       await supabase.from('booking_activity_log').insert({
         booking_id: booking.id,
-        action: "Client Details Updated",
-        detail: `Client information was updated by ${adminName}`,
-        performed_by: adminName
+        type: "Client Details Updated",
+        message: `Client information was updated by ${adminName}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
 
       toast.success("Client details updated successfully");
+      onSuccess?.();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to update client details");
+      toast.error(`Failed to update client details: ${err.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -1006,7 +1039,7 @@ function EditClientModal({ booking, adminName, adminUid, onClose }) {
 }
 
 // Change Unit Modal Component
-function ChangeUnitModal({ booking, adminName, adminUid, onClose }) {
+function ChangeUnitModal({ booking, adminName, adminUid, onSuccess, onClose }) {
   const [properties, setProperties] = useState([]);
   const [loadingProps, setLoadingProps] = useState(true);
   
@@ -1095,24 +1128,28 @@ function ChangeUnitModal({ booking, adminName, adminUid, onClose }) {
           : `Unit ${newInv[newUnitIndex].unitName || ''}`
         }`;
 
-        await supabase.from('bookings').update({
+        const { error: bErr } = await supabase.from('bookings').update({
           property_id: selectedPropertyId,
           property_name: newProp.name,
           property_location: newProp.location,
           inventory_id: selectedInventoryId,
           unit_type: unitType,
           unit_number: unitNumber,
-          last_updated_by: adminUid
+          last_updated_by: adminUid,
+          updated_at: new Date().toISOString()
         }).eq('id', booking.id);
+        if (bErr) throw bErr;
 
         await supabase.from('booking_activity_log').insert({
           booking_id: booking.id,
-          action: "Unit Reassigned",
-          detail: `Moved from ${booking.propertyName} (${booking.unitType}) to ${newProp.name} (${unitType})`,
-          performed_by: adminName
+          type: "Unit Reassigned",
+          message: `Moved from ${booking.propertyName} (${booking.unitType}) to ${newProp.name} (${unitType}) by ${adminName}`,
+          actor_name: adminName,
+          actor_id: adminUid
         });
 
         toast.success("Unit successfully changed!");
+        onSuccess?.();
         onClose();
       } catch (err) {
         console.error(err);

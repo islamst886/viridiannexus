@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../supabase';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../../context/GlobalState';
+import { mapBookingFromDB, mapPaymentFromDB } from '../../utils/mappers';
 import { ArrowLeft, CheckCircle, Clock, FileText, Loader2, Building, DollarSign } from 'lucide-react';
 
 const STAGES = [
@@ -41,37 +42,20 @@ export default function BookingDetail() {
         return;
       }
       
-      setBooking({
-        id: bookingData.id,
-        bookingRef: bookingData.booking_ref,
-        propertyName: bookingData.property_name,
-        unitType: bookingData.unit_type,
-        unitNumber: bookingData.unit_number,
-        parkingIncluded: bookingData.parking_included,
-        parkingRequested: bookingData.parking_requested,
-        status: bookingData.status,
-        stage: bookingData.stage,
-        totalPrice: bookingData.total_price,
-        totalPaid: bookingData.total_paid
-      });
+      setBooking(mapBookingFromDB(bookingData));
 
       // 2. Fetch Payments Ledger
-      const { data: paymentsData } = await supabase
+      const { data: paymentsData, error: pErr } = await supabase
         .from('booking_payments')
         .select('*')
         .eq('booking_id', bookingId)
-        .order('scheduled_date', { ascending: true });
+        .order('due_date', { ascending: true })
+        .order('installment_number', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true });
         
+      if (pErr) console.error("Error fetching payments:", pErr);
       if (paymentsData) {
-        setPayments(paymentsData.map(p => ({
-          id: p.id,
-          amount: p.amount,
-          status: p.status,
-          scheduledDate: p.scheduled_date,
-          paidDate: p.paid_date,
-          receiptUrl: p.receipt_url,
-          title: p.title
-        })));
+        setPayments(paymentsData.map(mapPaymentFromDB));
       }
       setLoading(false);
     };
@@ -180,7 +164,8 @@ export default function BookingDetail() {
                       <tr><td colSpan={4} className="text-center py-8 text-gray-500">No payment records found</td></tr>
                     ) : (
                       payments.map((p) => {
-                        const isOverdue = p.status === 'Scheduled' && (p.scheduledDate.toDate ? p.scheduledDate.toDate() : new Date(p.scheduledDate)) < new Date();
+                        const dueDateObj = p.scheduledDate ? new Date(p.scheduledDate) : null;
+                        const isOverdue = p.status === 'Scheduled' && dueDateObj && !isNaN(dueDateObj.getTime()) && dueDateObj < new Date();
                         let statusBadge = '';
                         if (p.status === 'Paid') statusBadge = 'bg-green-100 text-green-800';
                         else if (p.status === 'Partially Paid') statusBadge = 'bg-amber-100 text-amber-800';

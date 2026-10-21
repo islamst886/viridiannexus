@@ -115,16 +115,18 @@ export default function AddParkingModal({ isOpen, onClose, booking, onComplete }
         parking_included: parkingDisplayStr,
         total_price: newTotalPrice,
         balance_due: newBalanceDue,
-        last_updated_by: adminUid
+        last_updated_by: adminUid,
+        updated_at: new Date().toISOString()
       }).eq('id', booking.id);
       
       // 3. Activity Log
       const addedLabels = newlyAssigned.map(s => s.label).join(', ');
       await supabase.from('booking_activity_log').insert({
         booking_id: booking.id,
-        action: 'Parking Added & Price Adjusted',
-        detail: `Added parking spots: [${addedLabels}]. Total price increased by ৳${addAmount.toLocaleString('en-IN')}. Reason: ${notes}`,
-        performed_by: adminName
+        type: 'Parking Added & Price Adjusted',
+        message: `Added parking spots: [${addedLabels}]. Total price increased by ৳${addAmount.toLocaleString('en-IN')}.${notes ? ` Reason: ${notes}` : ''}`,
+        actor_name: adminName,
+        actor_id: adminUid
       });
 
       // 4. Adjust Ledger (Create a debit note/invoice)
@@ -132,23 +134,22 @@ export default function AddParkingModal({ isOpen, onClose, booking, onComplete }
         await supabase.from('booking_payments').insert({
           booking_id: booking.id,
           type: 'Add-on Invoice (Parking)',
-          scheduled_date: (invoiceDueDate ? new Date(invoiceDueDate) : new Date()).toISOString(),
+          due_date: (invoiceDueDate ? new Date(invoiceDueDate) : new Date()).toISOString().split('T')[0],
           scheduled_amount: addAmount,
           received_amount: 0,
-          payment_mode: '',
-          reference_number: 'PARKING-ADDON',
+          payment_mode: 'Cash',
           status: 'Scheduled',
-          note: 'Invoice for adding parking mid-booking.',
+          notes: `Invoice for adding parking mid-booking.${notes ? ` Note: ${notes}` : ''}`,
           recorded_by: adminUid
         });
       }
 
       toast.success('Parking spots successfully added to booking.');
-      onComplete();
+      onComplete?.();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error(`Failed to add parking: ${err.message}`);
+      toast.error(`Failed to add parking: ${err.message || 'Unknown error'}`);
     } finally {
       setSubmitting(false);
     }

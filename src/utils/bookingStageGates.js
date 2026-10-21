@@ -61,15 +61,24 @@ export function evaluateStagePrerequisites(targetStage, booking, payments = []) 
   const tokenPayment = payments.find(p => p.type === 'Token');
   const downPayment = payments.find(p => p.type === 'Down Payment');
   
+  const tokenReceived = Number(tokenPayment?.receivedAmount ?? tokenPayment?.received_amount) || 0;
+  const tokenScheduled = Number(tokenPayment?.scheduledAmount ?? tokenPayment?.scheduled_amount ?? booking.tokenAmount ?? booking.token_amount) || 0;
   const isTokenPaid = tokenPayment 
-    ? (tokenPayment.status === 'Paid' || (Number(tokenPayment.receivedAmount) || 0) >= (Number(tokenPayment.scheduledAmount) || 0))
-    : (Number(booking.totalPaid) || 0) >= (Number(booking.tokenAmount) || 1);
+    ? (tokenPayment.status === 'Paid' || tokenReceived >= (tokenScheduled || 1))
+    : (Number(booking.totalPaid ?? booking.total_paid) || 0) >= (Number(booking.tokenAmount ?? booking.token_amount) || 1);
 
+  const dpReceived = Number(downPayment?.receivedAmount ?? downPayment?.received_amount) || 0;
+  const dpScheduled = Number(downPayment?.scheduledAmount ?? downPayment?.scheduled_amount ?? booking.downPaymentAmount ?? booking.down_payment_amount) || 0;
   const isDownPaymentPaid = downPayment
-    ? (downPayment.status === 'Paid' || (Number(downPayment.receivedAmount) || 0) >= (Number(downPayment.scheduledAmount) || 0))
-    : (Number(booking.totalPaid) || 0) >= ((Number(booking.tokenAmount) || 0) + (Number(booking.downPaymentAmount) || 1));
+    ? (downPayment.status === 'Paid' || dpReceived >= (dpScheduled || 1))
+    : (Number(booking.totalPaid ?? booking.total_paid) || 0) >= ((Number(booking.tokenAmount ?? booking.token_amount) || 0) + (Number(booking.downPaymentAmount ?? booking.down_payment_amount) || 1));
 
-  const totalBalance = Number(booking.balanceDue) !== undefined ? Number(booking.balanceDue) : (Number(booking.totalPrice) - Number(booking.totalPaid));
+  const rawBalance = booking.balanceDue !== undefined 
+    ? booking.balanceDue 
+    : (booking.balance_due !== undefined 
+      ? booking.balance_due 
+      : (Number(booking.totalPrice ?? booking.total_price ?? 0) - Number(booking.totalPaid ?? booking.total_paid ?? 0)));
+  const totalBalance = Number(rawBalance) || 0;
   const isZeroBalance = totalBalance <= 0;
   
   const unpaidPaymentsCount = payments.filter(p => p.status !== 'Paid' && p.status !== 'Waived').length;
@@ -173,14 +182,14 @@ export function evaluateStagePrerequisites(targetStage, booking, payments = []) 
       requirements.push({
         id: 'agreement_prereq',
         title: 'Legal Agreement Executed',
-        met: currentIndex >= STAGES.indexOf('Agreement Signed') || Boolean(booking.agreementDate),
+        met: currentIndex >= STAGES.indexOf('Agreement Signed') || Boolean(booking.agreementDate || booking.agreement_date),
         details: 'Formal sales agreement has been signed.'
       });
       break;
     }
 
     case 'Completed': {
-      const isHandoverDone = currentIndex >= STAGES.indexOf('Handover') || Boolean(booking.handoverDate);
+      const isHandoverDone = currentIndex >= STAGES.indexOf('Handover') || Boolean(booking.handoverDate || booking.handover_date);
       requirements.push({
         id: 'handover_prereq',
         title: 'Physical Handover Completed',
