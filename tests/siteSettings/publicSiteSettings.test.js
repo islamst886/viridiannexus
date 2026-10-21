@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveSocialLinks,
   cleanWhatsAppNumber,
-  generateWhatsAppLink
+  generateWhatsAppLink,
+  normalizeExternalUrl
 } from '../helpers/siteSettingsLogic';
 import { createMockSiteSettings } from '../helpers/mockData';
 
@@ -45,7 +46,7 @@ describe('Public & Website Visitor Site Settings Touchpoints (TC-PUB)', () => {
     });
   });
 
-  describe('TC-PUB-002: External Link Security Attributes', () => {
+  describe('TC-PUB-002: External Link Security Attributes & Protocol Normalization', () => {
     it('should enforce security attributes: target="_blank" and rel="noopener noreferrer"', () => {
       const linkAttributes = {
         target: '_blank',
@@ -54,6 +55,26 @@ describe('Public & Website Visitor Site Settings Touchpoints (TC-PUB)', () => {
 
       expect(linkAttributes.target).toBe('_blank');
       expect(linkAttributes.rel).toBe('noopener noreferrer');
+    });
+
+    it('should normalize bare domain inputs into valid absolute URLs (preventing localhost:5173/youtube.com 404s)', () => {
+      expect(normalizeExternalUrl('youtube.com')).toBe('https://youtube.com');
+      expect(normalizeExternalUrl('facebook.com/viridiannexus')).toBe('https://facebook.com/viridiannexus');
+      expect(normalizeExternalUrl('linkedin.com/company/viridiannexus')).toBe('https://linkedin.com/company/viridiannexus');
+      expect(normalizeExternalUrl('  youtube.com  ')).toBe('https://youtube.com');
+    });
+
+    it('should preserve fully qualified http:// and https:// URLs unchanged', () => {
+      expect(normalizeExternalUrl('https://youtube.com/@viridiannexus')).toBe('https://youtube.com/@viridiannexus');
+      expect(normalizeExternalUrl('http://myportal.com')).toBe('http://myportal.com');
+    });
+
+    it('should neutralize dangerous script protocols and handle empty values gracefully', () => {
+      expect(normalizeExternalUrl('javascript:alert(1)')).toBe('');
+      expect(normalizeExternalUrl('data:text/html,test')).toBe('');
+      expect(normalizeExternalUrl('')).toBe('');
+      expect(normalizeExternalUrl(null)).toBe('');
+      expect(normalizeExternalUrl(undefined)).toBe('');
     });
   });
 

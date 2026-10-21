@@ -106,6 +106,29 @@ export function resolveSocialLinks(siteSettings) {
 }
 
 /**
+ * Normalizes external URLs to ensure an absolute protocol (https://) is present
+ */
+export function normalizeExternalUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  if (/^(javascript|data|vbscript):/i.test(trimmed)) {
+    return '';
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`;
+  }
+
+  return `https://${trimmed}`;
+}
+
+/**
  * Prepares payload for Supabase upsert on public.settings
  */
 export function prepareSettingsUpsertPayload(formData, userId) {
@@ -113,6 +136,10 @@ export function prepareSettingsUpsertPayload(formData, userId) {
     key: 'site',
     value: {
       ...formData,
+      facebookUrl: normalizeExternalUrl(formData.facebookUrl),
+      linkedinUrl: normalizeExternalUrl(formData.linkedinUrl),
+      youtubeUrl: normalizeExternalUrl(formData.youtubeUrl),
+      whatsappNumber: cleanWhatsAppNumber(formData.whatsappNumber),
       lastUpdatedAt: new Date().toISOString(),
       lastUpdatedBy: userId || null
     }

@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
 import { useGlobalState } from '../../context/GlobalState';
 import WhatsAppIcon from '../../components/WhatsAppIcon';
+import { normalizeExternalUrl } from '../../utils/urlHelpers';
 
 export default function SiteSettings() {
   const { userProfile, isSuperAdmin } = useGlobalState();
@@ -48,18 +49,24 @@ export default function SiteSettings() {
       toast.error("Only Super Admins can update global site settings.");
       return;
     }
-    
+
+    const normalizedData = {
+      facebookUrl: normalizeExternalUrl(formData.facebookUrl),
+      youtubeUrl: normalizeExternalUrl(formData.youtubeUrl),
+      linkedinUrl: normalizeExternalUrl(formData.linkedinUrl),
+      whatsappNumber: formData.whatsappNumber ? formData.whatsappNumber.replace(/\D/g, '') : '',
+      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedBy: userProfile?.uid
+    };
+
     setSaving(true);
     try {
       const { error } = await supabase.from('settings').upsert({
         key: 'site',
-        value: {
-          ...formData,
-          lastUpdatedAt: new Date().toISOString(),
-          lastUpdatedBy: userProfile?.uid
-        }
+        value: normalizedData
       });
       if (error) throw error;
+      setFormData(prev => ({ ...prev, ...normalizedData }));
       toast.success('Site settings updated successfully.');
     } catch (err) {
       console.error(err);
