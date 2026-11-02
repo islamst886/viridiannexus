@@ -8,6 +8,7 @@ import Location from './pages/Location';
 import Legal from './pages/Legal';
 import NRB from './pages/NRB';
 import Contact from './pages/Contact';
+import JournalArticle from './pages/JournalArticle';
 
 // Premium Features
 import VirtualTour from './pages/VirtualTour';
@@ -69,6 +70,8 @@ const router = createBrowserRouter([
           { path: "legal", element: <Legal /> },
           { path: "nrb", element: <NRB /> },
           { path: "contact", element: <Contact /> },
+          { path: "journal/:slug", element: <JournalArticle /> },
+          { path: "journal", element: <JournalArticle /> },
 
           { path: "virtual-tour", element: <VirtualTour /> },
           { path: "live-cameras", element: <LiveCameras /> },

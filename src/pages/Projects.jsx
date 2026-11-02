@@ -81,17 +81,24 @@ function FilterContent({
       {communities.length > 0 && (
         <div>
           <p style={sectionHeadingStyle}>Communities</p>
-          {communities.map(c => (
-            <label key={c} style={checkRowStyle}>
-              <input
-                type="checkbox"
-                checked={selectedCommunities.includes(c)}
-                onChange={() => toggleCommunity(c)}
-                style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#0d6e4d' }}
-              />
-              <span style={{ fontSize: '13px', color: '#4b5563' }}>{c}</span>
-            </label>
-          ))}
+          {communities.map(c => {
+            const isChecked = selectedCommunities.some(sc =>
+              sc.toLowerCase() === c.toLowerCase() ||
+              c.toLowerCase().includes(sc.toLowerCase()) ||
+              sc.toLowerCase().includes(c.toLowerCase())
+            );
+            return (
+              <label key={c} style={checkRowStyle}>
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleCommunity(c)}
+                  style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#0d6e4d' }}
+                />
+                <span style={{ fontSize: '13px', color: '#4b5563' }}>{c}</span>
+              </label>
+            );
+          })}
         </div>
       )}
 
@@ -184,8 +191,44 @@ export default function Projects() {
   const communities = useMemo(() =>
     [...new Set(properties.map(p => p.location).filter(Boolean))], [properties]);
 
+  // Synchronize when URL search parameters change
+  useEffect(() => {
+    const loc = searchParams.get('location');
+    const st = searchParams.get('status');
+    const t = searchParams.get('type');
+    const q = searchParams.get('search') || searchParams.get('q');
+    const pr = searchParams.get('price');
+
+    if (loc) {
+      setSelectedCommunities([loc]);
+    }
+    if (st) {
+      setSelectedStatus([st]);
+    }
+    if (t) {
+      setSelectedTypes([t]);
+    }
+    if (pr) {
+      setSelectedPriceRanges([pr]);
+    }
+    if (q) {
+      setSearchTerm(q);
+    }
+  }, [searchParams]);
+
   const toggleCommunity = useCallback(c =>
-    setSelectedCommunities(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]), []);
+    setSelectedCommunities(prev => {
+      const match = prev.find(x => 
+        x.toLowerCase() === c.toLowerCase() || 
+        c.toLowerCase().includes(x.toLowerCase()) || 
+        x.toLowerCase().includes(c.toLowerCase())
+      );
+      if (match) {
+        return prev.filter(x => x !== match);
+      } else {
+        return [...prev, c];
+      }
+    }), []);
 
   const toggleStatus = useCallback(s =>
     setSelectedStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]), []);
@@ -207,11 +250,19 @@ export default function Projects() {
       const search = !searchTerm ||
         p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.location?.toLowerCase().includes(searchTerm.toLowerCase());
-      const com    = selectedCommunities.length === 0 || selectedCommunities.includes(p.location);
+      const com = selectedCommunities.length === 0 || selectedCommunities.some(c =>
+        p.location?.toLowerCase().includes(c.toLowerCase()) ||
+        c.toLowerCase().includes(p.location?.toLowerCase())
+      );
       const dStatus = (p.inventory && p.inventory.length > 0 && !p.inventory.some(inv => inv.status === 'Available')) ? 'Sold Out' : p.status;
-      const status = selectedStatus.length === 0 || selectedStatus.includes(dStatus);
+      const status = selectedStatus.length === 0 || selectedStatus.some(s =>
+        s.toLowerCase() === dStatus?.toLowerCase() ||
+        dStatus?.toLowerCase().includes(s.toLowerCase())
+      );
       const pTypes = Array.isArray(p.propertyType) ? p.propertyType : (p.propertyType ? [p.propertyType] : []);
-      const type   = selectedTypes.length === 0 || selectedTypes.some(t => pTypes.includes(t));
+      const type = selectedTypes.length === 0 || selectedTypes.some(t =>
+        pTypes.some(pt => pt.toLowerCase().includes(t.toLowerCase()) || t.toLowerCase().includes(pt.toLowerCase()))
+      );
       const price  = activePriceRanges.length === 0 || (() => {
         const pricesToCheck = [];
         const baseVal = parsePriceTk(p.price);
@@ -318,6 +369,48 @@ export default function Projects() {
 
           {/* Grid */}
           <div className="grid-col">
+            {/* Active filter badges */}
+            {(selectedCommunities.length > 0 || selectedStatus.length > 0 || selectedTypes.length > 0 || selectedPriceRanges.length > 0 || searchTerm) && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Active Filters:</span>
+                {selectedCommunities.map(c => (
+                  <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#e6f4ea', color: '#007F66', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '700' }}>
+                    <MapPin size={12} /> {c}
+                    <button onClick={() => toggleCommunity(c)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#007F66' }} title="Remove filter"><X size={13} /></button>
+                  </span>
+                ))}
+                {selectedStatus.map(s => (
+                  <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#eff6ff', color: '#1d4ed8', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '700' }}>
+                    {s}
+                    <button onClick={() => toggleStatus(s)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#1d4ed8' }} title="Remove filter"><X size={13} /></button>
+                  </span>
+                ))}
+                {selectedTypes.map(t => (
+                  <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fdf4ff', color: '#a21caf', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '700' }}>
+                    {t}
+                    <button onClick={() => toggleType(t)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#a21caf' }} title="Remove filter"><X size={13} /></button>
+                  </span>
+                ))}
+                {selectedPriceRanges.map(pr => (
+                  <span key={pr} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fffbeb', color: '#b45309', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '700' }}>
+                    {pr}
+                    <button onClick={() => togglePriceRange(pr)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#b45309' }} title="Remove filter"><X size={13} /></button>
+                  </span>
+                ))}
+                {searchTerm && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', color: '#374151', padding: '4px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: '700' }}>
+                    "{searchTerm}"
+                    <button onClick={() => setSearchTerm('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: '#374151' }} title="Clear search"><X size={13} /></button>
+                  </span>
+                )}
+                <button
+                  onClick={clearAll}
+                  style={{ border: 'none', background: 'transparent', color: '#ef4444', fontSize: '12px', fontWeight: '700', cursor: 'pointer', marginLeft: '4px', textDecoration: 'underline' }}
+                >
+                  Reset All
+                </button>
+              </div>
+            )}
             <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '20px' }}>
               Showing <strong style={{ color: '#111827' }}>{filtered.length}</strong> of <strong style={{ color: '#111827' }}>{properties.length}</strong> projects
             </p>
