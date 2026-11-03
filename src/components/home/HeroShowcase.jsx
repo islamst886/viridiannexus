@@ -12,7 +12,7 @@ const HERO_SLIDES = [
     subtitle: 'Viridian Jolshiri Exclusivity',
     location: 'Sector 15, Jolshiri Abashon, Dhaka',
     tagline: '48% Dedicated Ecological Sanctuary • 4 Master Suites • Private Sky Terraces',
-    description: "Dhaka's definitive biophilic residence. Masterfully engineered within the prestigious Bangladesh Army master plan where lush living canopies meet uncompromising luxury.",
+    description: "Dhaka's definitive biophilic sanctuary, masterfully engineered within the Jolshiri master plan where lush living canopies seamlessly meet uncompromising luxury.",
     image: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=2000&q=85',
     propertyId: 'the-sapphire-penthouse'
   },
@@ -24,7 +24,7 @@ const HERO_SLIDES = [
     subtitle: 'The Sapphire Penthouse',
     location: 'Road 83, Gulshan 2 Diplomatic Zone, Dhaka',
     tagline: '4,850 Sq.Ft. • Private Infinity Lap Pool • 3 Dedicated Basements',
-    description: 'An elite vertical sanctuary. Direct biometric elevator access into your private foyer, floor-to-ceiling acoustic glass, and an expansive private rooftop lap pool.',
+    description: 'An elite vertical sanctuary featuring direct biometric elevator access into your private foyer, acoustic glass walls, and an expansive private rooftop lap pool.',
     image: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=2000&q=85',
     propertyId: 'the-sapphire-penthouse'
   },
@@ -36,7 +36,7 @@ const HERO_SLIDES = [
     subtitle: 'Banani Lakefront Terraces',
     location: 'Road 11 Waterfront, Banani, Dhaka',
     tagline: 'Panoramic Lake Vistas • Smart IoT Integration • Handover 2026',
-    description: 'Harmonious lakeside living. Expansive double-height living spaces, European acoustic insulation, and serene, private waterfront views in the heart of Dhaka.',
+    description: 'Harmonious waterfront living offering double-height living salons, European acoustic insulation, and serene panoramic lake vistas in the heart of Banani.',
     image: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=2000&q=85',
     propertyId: 'emerald-heights'
   }
@@ -166,7 +166,7 @@ export default function HeroShowcase({ onOpenVipModal }) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.3 }}
-            className="text-base sm:text-lg md:text-xl text-brand-neutral/85 font-light max-w-2xl mx-auto leading-relaxed mb-8 drop-shadow"
+            className="text-base sm:text-lg md:text-xl text-brand-neutral/85 font-light max-w-2xl mx-auto leading-relaxed mb-8 drop-shadow text-pretty"
           >
             {slide.description}
           </motion.p>

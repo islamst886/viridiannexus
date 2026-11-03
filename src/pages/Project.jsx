@@ -371,18 +371,22 @@ function ProjectContent() {
             {/* 3. Detailed Overview */}
             <section>
               <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-3">Property Overview</h2>
-              <div className="prose max-w-none text-brand-text/80 leading-relaxed space-y-4">
+              <div className="prose max-w-none text-brand-text/80 leading-relaxed space-y-5 text-justify [text-align-last:left] [text-justify:inter-word]">
                 {projectData.overview ? (
-                  projectData.overview.split('\n').map((paragraph, idx) => (
-                    paragraph.trim() ? <p key={idx}>{paragraph}</p> : null
+                  projectData.overview.split(/\n+/).map((paragraph, idx) => (
+                    paragraph.trim() ? (
+                      <p key={idx} className="text-justify [text-align-last:left] [text-justify:inter-word] leading-relaxed text-pretty">
+                        {paragraph.trim()}
+                      </p>
+                    ) : null
                   ))
                 ) : (
                   <>
-                    <p>
-                      Experience the pinnacle of luxury living at <strong>{projectData.name}</strong>, a masterfully designed residential development located in the heart of {projectData.location}. Designed for those who appreciate exclusivity, this single-unit-per-floor concept guarantees absolute privacy and an undisturbed lifestyle.
+                    <p className="text-justify [text-align-last:left] [text-justify:inter-word] leading-relaxed text-pretty">
+                      Experience the pinnacle of luxury living at <strong>{projectData.name}</strong>, an iconic residential landmark situated in the prestigious enclave of {projectData.location}. Masterfully engineered for discerning homeowners who demand uncompromised privacy, this signature single-unit-per-floor residence provides an undisturbed, tranquil sanctuary.
                     </p>
-                    <p>
-                      Every unit is crafted to perfection, featuring imported marble flooring, floor-to-ceiling double-glazed windows, and an expansive layout that maximizes natural light and cross-ventilation. Step into a world where modern architecture meets ecological harmony, backed by the unparalleled security of the Jolshiri Abashon smart city infrastructure.
+                    <p className="text-justify [text-align-last:left] [text-justify:inter-word] leading-relaxed text-pretty">
+                      Each residence is crafted with meticulous attention to detail, featuring imported European marble finishes, acoustic double-glazed glass facades, and expansive spatial layouts that maximize natural sunlight and cross-ventilation. Step into an exceptional living environment where contemporary biophilic design seamlessly meets the highest standards of structural security.
                     </p>
                   </>
                 )}
