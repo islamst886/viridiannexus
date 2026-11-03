@@ -223,6 +223,15 @@ export default function PropertyForm() {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
+    // Check individual file size limit (Supabase Storage max 50MB per file)
+    const MAX_SIZE_BYTES = 50 * 1024 * 1024;
+    const oversizedFiles = files.filter(f => f.size > MAX_SIZE_BYTES);
+    if (oversizedFiles.length > 0) {
+      toast.error(`${oversizedFiles.length} file(s) exceed the 50MB limit per image.`);
+      e.target.value = '';
+      return;
+    }
+
     setUploadingImage('gallery');
     toast.info(`Uploading ${files.length} image(s) to gallery...`);
     const newGalleryUrls = [];
@@ -262,6 +271,19 @@ export default function PropertyForm() {
   const handleFileUpload = async (e, mediaType) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Check file size limit (Supabase Storage max 50MB per file)
+    const MAX_SIZE_BYTES = 50 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      if (mediaType === 'brochure') {
+        toast.error(`This PDF is ${fileSizeMB}MB, exceeding the 50MB direct upload limit. Please compress the PDF for web or paste a Google Drive/Dropbox link in Option 1.`);
+      } else {
+        toast.error(`File size (${fileSizeMB}MB) exceeds the maximum allowed limit of 50MB.`);
+      }
+      e.target.value = '';
+      return;
+    }
 
     setUploadingImage(mediaType);
     toast.info(`Uploading ${mediaType}...`);
@@ -1269,8 +1291,8 @@ export default function PropertyForm() {
               
               <div className="space-y-6">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 1: External Link</label>
-                  <p className="text-xs text-gray-500 mb-3">Paste a public Google Drive or Dropbox link here.</p>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 1: External Link (Recommended for Large Files &gt;50MB)</label>
+                  <p className="text-xs text-gray-500 mb-3">Upload files exceeding 50MB (like high-res 100MB+ brochures) to Google Drive, Dropbox, or OneDrive. Set access to &ldquo;Anyone with the link can view&rdquo; and paste the URL here.</p>
                   
                   {formData.brochureUrl ? (
                     <div className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-md">
@@ -1304,7 +1326,7 @@ export default function PropertyForm() {
                         setIsDirty(true);
                       }} 
                       placeholder="https://drive.google.com/..." 
-                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary" 
+                      className="w-full p-3 bg-gray-50 border border-gray-200 rounded outline-none focus:border-brand-primary text-sm" 
                     />
                   )}
                 </div>
@@ -1318,7 +1340,7 @@ export default function PropertyForm() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 2: Direct Upload (Supabase Storage)</label>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Option 2: Direct Upload (Max 50MB)</label>
                       <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-gray-50 hover:bg-gray-100 transition-colors">
                         <div className="space-y-1 text-center">
                           {uploadingImage === 'brochure' ? (
@@ -1335,7 +1357,7 @@ export default function PropertyForm() {
                                   <input type="file" className="sr-only" accept=".pdf" disabled={uploadingImage !== null} onChange={(e) => handleFileUpload(e, 'brochure')} />
                                 </label>
                               </div>
-                              <p className="text-xs text-gray-500 mt-2">Any size PDF supported</p>
+                              <p className="text-xs text-gray-500 mt-2">Max file size: 50MB (PDF format). For larger files, use Option 1 or compress first.</p>
                             </>
                           )}
                         </div>

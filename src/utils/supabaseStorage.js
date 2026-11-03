@@ -13,6 +13,8 @@ const BUCKET_MAP = {
   avatar: 'avatars',
 };
 
+export const MAX_SUPABASE_FILE_SIZE = 50 * 1024 * 1024; // 50MB Supabase hard limit
+
 /**
  * Uploads a file to Supabase Storage and returns its public URL.
  *
@@ -22,6 +24,13 @@ const BUCKET_MAP = {
  * @returns {Promise<string>} Public URL of the uploaded file
  */
 export const uploadMedia = async (file, mediaType, prefix = '') => {
+  if (file && file.size > MAX_SUPABASE_FILE_SIZE) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    throw new Error(
+      `File size (${sizeMB}MB) exceeds the 50MB storage limit. For large documents like brochures, please compress the file or link it via Google Drive/Dropbox.`
+    );
+  }
+
   const bucket = BUCKET_MAP[mediaType] || 'property-media';
   const timestamp = Date.now();
   const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');

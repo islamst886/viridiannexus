@@ -93,6 +93,16 @@ export default function ProgressManager() {
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+
+    // Check individual file size limit (Supabase Storage max 50MB per file)
+    const MAX_SIZE_BYTES = 50 * 1024 * 1024;
+    const oversizedFiles = files.filter(f => f.size > MAX_SIZE_BYTES);
+    if (oversizedFiles.length > 0) {
+      toast.error(`${oversizedFiles.length} file(s) exceed the 50MB limit per image.`);
+      e.target.value = '';
+      return;
+    }
+
     setUploadingImage(true);
     toast.info(`Uploading ${files.length} image(s)...`);
     try {
