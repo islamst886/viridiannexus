@@ -1,0 +1,600 @@
+import React, { useState } from 'react';
+import { Link, Outlet, useLocation } from 'react-router-dom';
+import {
+  Bell,
+  ChevronDown,
+  Heart,
+  Loader2,
+  Mail,
+  MapPin,
+  Menu,
+  MessageSquare,
+  Phone,
+  X,
+} from 'lucide-react';
+import { toast } from 'react-toastify';
+import { useAuth } from '../context/AuthContext';
+import { useGlobalState } from '../context/GlobalState';
+import { COMPANY_INFO } from '../data/companyInfo';
+import { cn } from '../lib/utils';
+import { supabase } from '../supabase';
+import { normalizeExternalUrl } from '../utils/urlHelpers';
+import BrandMotto from './BrandMotto';
+import FloatingWhatsApp from './FloatingWhatsApp';
+import WhatsAppIcon from './WhatsAppIcon';
+
+export default function Layout() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const location = useLocation();
+  const {
+    isLoggedIn,
+    isAdmin,
+    userProfile,
+    wishlist,
+    notifications,
+    markNotificationsRead,
+    siteSettings,
+    unreadInquiriesCount,
+  } = useGlobalState();
+  const { signOut } = useAuth();
+  const [email, setEmail] = useState('');
+  const [isSubscribing, setIsSubscribing] = useState(false);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const safeAvatarUrl = normalizeExternalUrl(userProfile?.avatar);
+  const safeFacebookUrl = normalizeExternalUrl(siteSettings?.facebookUrl);
+  const safeLinkedinUrl = normalizeExternalUrl(siteSettings?.linkedinUrl);
+  const safeYoutubeUrl = normalizeExternalUrl(siteSettings?.youtubeUrl);
+  const cleanWhatsapp = siteSettings?.whatsappNumber?.replace(/\D/g, '') ?? '';
+
+  const handleSubscribe = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Please enter a valid email address.');
+      return;
+    }
+
+    setIsSubscribing(true);
+    try {
+      const { error } = await supabase.from('newsletter_subscribers').insert({
+        email,
+        subscribed_at: new Date().toISOString(),
+        status: 'active',
+      });
+      if (error) throw error;
+
+      toast.success('Welcome to Viridian Nexus Development Ltd. Exclusive Updates.');
+      setEmail('');
+    } catch (error) {
+      console.error(error);
+      toast.error('An error occurred. Please try again later.');
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
+  const navLinks = [
+    { name: 'Home', path: '/' },
+    { name: 'Projects', path: '/projects' },
+    { name: 'Leadership', path: '/leadership' },
+    { name: 'Live', path: '/live-cameras' },
+    { name: '360° Tour', path: '/virtual-tour' },
+    { name: 'Contact', path: '/contact' },
+  ];
+
+  return (
+    <div className="min-h-screen flex flex-col bg-brand-neutral font-sans">
+      {/* Navigation Header */}
+      <header className="sticky top-0 z-50 w-full bg-brand-dark shadow-md border-b border-brand-primary/20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-20">
+            {/* Brand Logo */}
+            <Link to="/" className="flex items-center gap-2">
+              <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                <img
+                  src="/logo.png"
+                  alt="Viridian Nexus Logo"
+                  className="w-full h-full object-contain drop-shadow-md"
+                />
+              </div>
+              <div className="hidden sm:flex flex-col justify-center">
+                <span className="font-serif text-2xl font-bold text-brand-neutral tracking-wide leading-none">
+                  Viridian<span className="text-brand-accent">Nexus</span>
+                </span>
+                <span className="text-brand-accent text-[9px] uppercase tracking-[0.25em] font-bold mt-1">
+                  Development Ltd.
+                </span>
+              </div>
+            </Link>
+
+            {/* Desktop Nav */}
+            <nav className="hidden xl:flex space-x-6">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className={cn(
+                    'text-sm uppercase tracking-wider font-semibold transition-colors duration-300 flex items-center h-20',
+                    location.pathname === link.path
+                      ? 'text-brand-accent border-b-2 border-brand-accent'
+                      : 'text-brand-neutral hover:text-brand-accent'
+                  )}
+                >
+                  {link.name}
+                </Link>
+              ))}
+            </nav>
+
+            {/* User Actions */}
+            <div className="flex items-center space-x-4 md:space-x-6">
+              {!isLoggedIn ? (
+                <>
+                  <Link
+                    to="/auth?redirect=/dashboard/wishlist"
+                    className="relative text-brand-neutral hover:text-brand-accent transition-colors"
+                  >
+                    <Heart size={24} />
+                  </Link>
+                  <Link
+                    to="/auth"
+                    className="hidden sm:inline-block bg-brand-primary text-white px-5 py-2 rounded font-bold hover:bg-brand-dark transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                </>
+              ) : (
+                <>
+                  {!isAdmin && (
+                    <Link
+                      to="/dashboard/wishlist"
+                      className="relative text-brand-neutral hover:text-brand-accent transition-colors"
+                    >
+                      <Heart size={24} />
+                      {wishlist.length > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-brand-accent text-brand-dark text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                          {wishlist.length}
+                        </span>
+                      )}
+                    </Link>
+                  )}
+
+                  {/* Admin Unread Inquiries Shortcut */}
+                  {isAdmin && (
+                    <Link
+                      to="/admin/messages"
+                      title={
+                        unreadInquiriesCount > 0
+                          ? `${unreadInquiriesCount} unread client inquiry message(s)`
+                          : 'Admin Messages Inbox'
+                      }
+                      aria-label={
+                        unreadInquiriesCount > 0
+                          ? `${unreadInquiriesCount} unread client messages`
+                          : 'Admin Messages Inbox'
+                      }
+                      className="relative text-brand-neutral hover:text-brand-accent transition-colors"
+                    >
+                      <MessageSquare size={22} />
+                      {unreadInquiriesCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-brand-accent text-brand-dark text-xs font-bold rounded-full h-5 min-w-[20px] px-1 flex items-center justify-center">
+                          {unreadInquiriesCount > 99 ? '99+' : unreadInquiriesCount}
+                        </span>
+                      )}
+                    </Link>
+                  )}
+
+                  {/* Notifications */}
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        void markNotificationsRead();
+                      }}
+                      className="relative text-brand-neutral hover:text-brand-accent transition-colors"
+                    >
+                      <Bell size={24} />
+                      {unreadCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                          {unreadCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* User Profile Dropdown */}
+                  <div className="relative hidden md:block">
+                    <button
+                      onClick={() => setIsProfileOpen(!isProfileOpen)}
+                      className="flex items-center space-x-2 text-brand-neutral hover:text-brand-accent focus:outline-none"
+                    >
+                      {safeAvatarUrl ? (
+                        <img
+                          src={safeAvatarUrl}
+                          alt="Profile"
+                          className="w-8 h-8 rounded-full bg-brand-primary/20 object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-brand-primary text-brand-neutral flex items-center justify-center font-bold uppercase text-sm border border-brand-accent/50">
+                          {userProfile?.displayName?.charAt(0) || 'U'}
+                        </div>
+                      )}
+                      <span className="text-sm font-semibold">
+                        {userProfile?.displayName || 'User'}
+                      </span>
+                      <ChevronDown size={16} />
+                    </button>
+
+                    {isProfileOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setIsProfileOpen(false)}
+                        ></div>
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50">
+                          {isAdmin ? (
+                            <>
+                              <Link
+                                to="/admin/dashboard"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="block px-4 py-2 text-sm font-bold text-brand-primary hover:bg-gray-100"
+                              >
+                                Admin Portal
+                              </Link>
+                              <Link
+                                to="/admin/messages"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              >
+                                <span>Messages</span>
+                                {unreadInquiriesCount > 0 && (
+                                  <span className="bg-brand-primary text-brand-neutral text-xs font-bold rounded-full px-2 py-0.5">
+                                    {unreadInquiriesCount > 99 ? '99+' : unreadInquiriesCount}
+                                  </span>
+                                )}
+                              </Link>
+                            </>
+                          ) : (
+                            <>
+                              <Link
+                                to="/dashboard"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              >
+                                My Dashboard
+                              </Link>
+                              <Link
+                                to="/dashboard/wishlist"
+                                onClick={() => setIsProfileOpen(false)}
+                                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              >
+                                Wishlist
+                              </Link>
+                            </>
+                          )}
+                          <div className="border-t border-gray-100 mt-1 pt-1">
+                            <button
+                              onClick={() => {
+                                setIsProfileOpen(false);
+                                void signOut();
+                              }}
+                              className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 font-semibold"
+                            >
+                              Sign out
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="xl:hidden text-brand-neutral hover:text-brand-accent focus:outline-none ml-2"
+              >
+                {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Nav */}
+        {isMenuOpen && (
+          <div className="xl:hidden bg-brand-dark/95 backdrop-blur-sm border-t border-brand-primary/20">
+            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  onClick={() => setIsMenuOpen(false)}
+                  className={cn(
+                    'block px-3 py-2 text-base font-medium tracking-wide uppercase',
+                    location.pathname === link.path
+                      ? 'text-brand-accent bg-brand-primary/10'
+                      : 'text-brand-neutral hover:text-brand-accent hover:bg-brand-primary/5'
+                  )}
+                >
+                  {link.name}
+                </Link>
+              ))}
+              {isLoggedIn ? (
+                <>
+                  <Link
+                    to={isAdmin ? '/admin/dashboard' : '/dashboard'}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="block px-3 py-2 text-base font-medium tracking-wide uppercase text-brand-neutral hover:text-brand-accent hover:bg-brand-primary/5"
+                  >
+                    {isAdmin ? 'Admin Portal' : 'Dashboard'}
+                  </Link>
+                  {isAdmin && (
+                    <Link
+                      to="/admin/messages"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="flex items-center justify-between px-3 py-2 text-base font-medium tracking-wide uppercase text-brand-neutral hover:text-brand-accent hover:bg-brand-primary/5"
+                    >
+                      <span>Admin Messages</span>
+                      {unreadInquiriesCount > 0 && (
+                        <span className="bg-brand-accent text-brand-dark text-xs font-bold rounded-full px-2 py-0.5">
+                          {unreadInquiriesCount > 99 ? '99+' : unreadInquiriesCount}
+                        </span>
+                      )}
+                    </Link>
+                  )}
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      void signOut();
+                    }}
+                    className="block w-full text-left px-3 py-2 text-base font-medium tracking-wide uppercase text-red-400 hover:bg-brand-primary/5"
+                  >
+                    Sign Out
+                  </button>
+                </>
+              ) : (
+                <Link
+                  to="/auth"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 text-base font-medium tracking-wide uppercase text-brand-accent bg-brand-primary/20"
+                >
+                  Sign In
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-grow">
+        <Outlet />
+      </main>
+
+      {/* Global Footer - Hidden on Auth Page */}
+      {location.pathname !== '/auth' && (
+        <footer className="bg-brand-dark text-brand-neutral py-12 border-t border-brand-primary/30 mt-auto">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-4">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 flex items-center justify-center flex-shrink-0">
+                  <img
+                    src="/logo.png"
+                    alt="Viridian Nexus Logo"
+                    className="w-full h-full object-contain drop-shadow-sm"
+                  />
+                </div>
+                <h3 className="text-xl font-serif text-brand-accent">
+                  {COMPANY_INFO.legalName}
+                </h3>
+              </div>
+              <div className="mb-3">
+                <BrandMotto size="footer" tone="gold" />
+              </div>
+              <p className="text-sm text-brand-neutral/80 leading-relaxed">
+                Crafting architectural masterpieces where natural ecology seamlessly meets modern
+                luxury.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="inline-block px-2.5 py-1 rounded bg-brand-primary/20 border border-brand-accent/30 text-[10px] font-bold uppercase tracking-wider text-brand-accent">
+                  {COMPANY_INFO.enlistments.rajuk}
+                </span>
+                <span className="inline-block px-2.5 py-1 rounded bg-brand-primary/20 border border-brand-accent/30 text-[10px] font-bold uppercase tracking-wider text-brand-accent">
+                  {COMPANY_INFO.enlistments.canttBoard}
+                </span>
+              </div>
+              <div className="mt-2.5 text-xs text-brand-neutral/60 leading-relaxed">
+                Authorized &amp; Approved by the Bangladesh Army &bull; BNBC 2020 Compliant
+              </div>
+              <div className="mt-6 flex gap-4">
+                {safeFacebookUrl && (
+                  <a
+                    href={safeFacebookUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-neutral/60 hover:text-white transition-colors"
+                    aria-label="Facebook"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                      <path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" />
+                    </svg>
+                  </a>
+                )}
+                {safeLinkedinUrl && (
+                  <a
+                    href={safeLinkedinUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-neutral/60 hover:text-white transition-colors"
+                    aria-label="LinkedIn"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                    </svg>
+                  </a>
+                )}
+                {safeYoutubeUrl && (
+                  <a
+                    href={safeYoutubeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-neutral/60 hover:text-white transition-colors"
+                    aria-label="YouTube"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.377.55a3.016 3.016 0 0 0-2.122 2.136C0 8.07 0 12 0 12s0 3.93.498 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.55 9.377.55 9.377.55s7.505 0 9.377-.55a3.016 3.016 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                    </svg>
+                  </a>
+                )}
+                {cleanWhatsapp && (
+                  <a
+                    href={`https://wa.me/${cleanWhatsapp}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-neutral/60 hover:text-[#25D366] transition-colors"
+                    aria-label="WhatsApp"
+                  >
+                    <WhatsAppIcon size={20} />
+                  </a>
+                )}
+              </div>
+            </div>
+            <div className="lg:col-span-3">
+              <h3 className="text-xl font-serif text-brand-accent mb-4">Corporate Office</h3>
+              <ul className="space-y-3 text-sm text-brand-neutral/85">
+                <li className="flex items-start gap-2.5">
+                  <MapPin size={16} className="text-brand-accent shrink-0 mt-1" />
+                  <span>
+                    {COMPANY_INFO.corporateOffice.street},
+                    <br />
+                    {COMPANY_INFO.corporateOffice.cityPostal}.
+                  </span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <Phone size={16} className="text-brand-accent shrink-0 mt-1" />
+                  <div className="flex flex-col">
+                    <a
+                      href={COMPANY_INFO.phones.landlineHref}
+                      className="hover:text-brand-accent transition-colors"
+                    >
+                      {COMPANY_INFO.phones.landline}
+                    </a>
+                    <a
+                      href={COMPANY_INFO.phones.mobileHref}
+                      className="hover:text-brand-accent transition-colors"
+                    >
+                      {COMPANY_INFO.phones.mobile}
+                    </a>
+                  </div>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Mail size={16} className="text-brand-accent shrink-0" />
+                  <a
+                    href={COMPANY_INFO.emailHref}
+                    className="hover:text-brand-accent transition-colors break-all"
+                  >
+                    {COMPANY_INFO.email}
+                  </a>
+                </li>
+                {/* <li className="flex items-center gap-2.5">
+                  <Globe size={16} className="text-brand-accent shrink-0" />
+                  <a
+                    href={COMPANY_INFO.websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-brand-accent transition-colors"
+                  >
+                    {COMPANY_INFO.websiteDisplay}
+                  </a>
+                </li> */}
+              </ul>
+            </div>
+            <div className="lg:col-span-2">
+              <h3 className="text-xl font-serif text-brand-accent mb-4">Quick Links</h3>
+              <ul className="space-y-2 text-sm grid grid-cols-2 lg:grid-cols-1">
+                <li>
+                  <Link to="/projects" className="hover:text-brand-accent transition-colors">
+                    Our Projects
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/leadership" className="hover:text-brand-accent transition-colors">
+                    Leadership
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/progress" className="hover:text-brand-accent transition-colors">
+                    Project Progress
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/virtual-tour" className="hover:text-brand-accent transition-colors">
+                    Virtual Tour
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/live-cameras" className="hover:text-brand-accent transition-colors">
+                    Live Cameras
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/contact" className="hover:text-brand-accent transition-colors">
+                    Contact Us
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/legal" className="hover:text-brand-accent transition-colors">
+                    Legal &amp; Compliance
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div className="lg:col-span-3">
+              <h3 className="text-xl font-serif text-brand-accent mb-4">Exclusive Newsletter</h3>
+              <p className="text-sm text-brand-neutral/80 mb-4">
+                For High-Net-Worth Individuals. Receive structural updates and investment insights.
+              </p>
+              <form className="flex" onSubmit={handleSubscribe}>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isSubscribing}
+                  placeholder="Your email address"
+                  className="bg-brand-neutral/10 border border-brand-primary/30 text-white px-4 py-2 w-full focus:outline-none focus:border-brand-accent disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={isSubscribing}
+                  className="bg-brand-primary text-white px-4 py-2 hover:bg-brand-primary/80 transition-colors disabled:opacity-50 flex items-center justify-center min-w-[100px]"
+                >
+                  {isSubscribing ? <Loader2 size={18} className="animate-spin" /> : 'Subscribe'}
+                </button>
+              </form>
+            </div>
+          </div>
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-brand-primary/20 text-center space-y-2">
+            <p className="text-[11px] text-brand-neutral/60 max-w-4xl mx-auto leading-relaxed">
+              {COMPANY_INFO.renderingsDisclaimer}{' '}
+              <Link
+                to="/legal#company-policies"
+                className="text-brand-accent/85 hover:text-brand-accent underline underline-offset-2"
+              >
+                View Official Disclaimers
+              </Link>
+            </p>
+            <p className="text-xs text-brand-neutral/50">
+              &copy; {new Date().getFullYear()} {COMPANY_INFO.legalName} All Rights Reserved. This
+              is a publication of {COMPANY_INFO.legalName} &bull; Adheres to Real Estate Development
+              and Management Act, 2010.
+            </p>
+          </div>
+        </footer>
+      )}
+
+      {/* Floating WhatsApp Widget */}
+      {location.pathname !== '/auth' && <FloatingWhatsApp />}
+    </div>
+  );
+}

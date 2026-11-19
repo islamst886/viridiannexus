@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /booking
+Disallow: /auth
+
+Sitemap: https://viridiannexus.com/sitemap.xml
