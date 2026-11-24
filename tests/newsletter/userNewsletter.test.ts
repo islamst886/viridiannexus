@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+  NEWSLETTER_MESSAGES,
+  classifyNewsletterSubscribeError,
+  isDuplicateNewsletterError,
+  isValidNewsletterEmail,
+  normalizeNewsletterEmail as normalizeProductionEmail,
+} from '../../src/utils/newsletter';
+import {
   normalizeNewsletterEmail,
   validateNewsletterEmail,
   evaluateNewsletterRLS,
@@ -26,6 +33,15 @@ describe('User & High-Net-Worth Investor Newsletter Subsystem (TC-USR)', () => {
       expect(validation.valid).toBe(true);
       expect(validation.normalizedEmail).toBe(clientUser.email);
     });
+
+    it('should normalize and validate investor emails with production utility', () => {
+      const normalized = normalizeProductionEmail('  Rahim.Chowdhury@Example.COM  ');
+      expect(normalized).toBe('rahim.chowdhury@example.com');
+      expect(isValidNewsletterEmail(normalized)).toBe(true);
+      expect(isValidNewsletterEmail('invalid-email')).toBe(false);
+      expect(isValidNewsletterEmail('<script>@example.com')).toBe(false);
+      expect(isValidNewsletterEmail('')).toBe(false);
+    });
   });
 
   describe('TC-USR-002: Duplicate Subscription Conflict (Unique Constraint)', () => {
@@ -38,28 +54,56 @@ describe('User & High-Net-Worth Investor Newsletter Subsystem (TC-USR)', () => {
       expect(isDuplicate).toBe(true);
     });
 
-    it('should simulate handling Postgres 23505 unique constraint violation cleanly', () => {
+    it('should classify Supabase Postgres 23505 unique constraint violation as already subscribed', () => {
       const duplicateError = {
         code: '23505',
+        details: null,
+        hint: null,
         message: 'duplicate key value violates unique constraint "newsletter_subscribers_email_key"',
       };
 
-      const handleSubscriptionError = (error: { code: string; message?: string }) => {
-        if (error.code === '23505') {
-          return {
-            status: 'already_subscribed',
-            message: 'You are already subscribed to our exclusive updates.',
-          };
-        }
-        return {
-          status: 'error',
-          message: 'An error occurred. Please try again later.',
-        };
-      };
+      expect(isDuplicateNewsletterError(duplicateError)).toBe(true);
+      const result = classifyNewsletterSubscribeError(duplicateError);
+      expect(result).toEqual({
+        status: 'already_subscribed',
+        message: NEWSLETTER_MESSAGES.ALREADY_SUBSCRIBED,
+      });
+    });
 
-      const result = handleSubscriptionError(duplicateError);
-      expect(result.status).toBe('already_subscribed');
-      expect(result.message).toContain('already subscribed');
+    it('should classify HTTP 409 conflicts and duplicate-key messages as already subscribed', () => {
+      expect(classifyNewsletterSubscribeError({ status: 409 })).toEqual({
+        status: 'already_subscribed',
+        message: NEWSLETTER_MESSAGES.ALREADY_SUBSCRIBED,
+      });
+      expect(
+        classifyNewsletterSubscribeError({
+          message: 'duplicate key value violates unique constraint "newsletter_subscribers_email_key"',
+        })
+      ).toEqual({
+        status: 'already_subscribed',
+        message: NEWSLETTER_MESSAGES.ALREADY_SUBSCRIBED,
+      });
+    });
+
+    it('should classify non-duplicate errors and invalid inputs as generic errors', () => {
+      expect(
+        classifyNewsletterSubscribeError({ code: '42501', message: 'row-level security violation' })
+      ).toEqual({
+        status: 'error',
+        message: NEWSLETTER_MESSAGES.GENERIC_ERROR,
+      });
+      expect(classifyNewsletterSubscribeError(new Error('Network timeout'))).toEqual({
+        status: 'error',
+        message: NEWSLETTER_MESSAGES.GENERIC_ERROR,
+      });
+      expect(classifyNewsletterSubscribeError(null)).toEqual({
+        status: 'error',
+        message: NEWSLETTER_MESSAGES.GENERIC_ERROR,
+      });
+      expect(classifyNewsletterSubscribeError(undefined)).toEqual({
+        status: 'error',
+        message: NEWSLETTER_MESSAGES.GENERIC_ERROR,
+      });
     });
   });
 

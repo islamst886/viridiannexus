@@ -18,6 +18,12 @@ import { useGlobalState } from '../context/GlobalState';
 import { COMPANY_INFO } from '../data/companyInfo';
 import { cn } from '../lib/utils';
 import { supabase } from '../supabase';
+import {
+  NEWSLETTER_MESSAGES,
+  classifyNewsletterSubscribeError,
+  isValidNewsletterEmail,
+  normalizeNewsletterEmail,
+} from '../utils/newsletter';
 import { normalizeExternalUrl } from '../utils/urlHelpers';
 import BrandMotto from './BrandMotto';
 import FloatingWhatsApp from './FloatingWhatsApp';
@@ -51,25 +57,40 @@ export default function Layout() {
 
   const handleSubscribe = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error('Please enter a valid email address.');
+    const normalizedEmail = normalizeNewsletterEmail(email);
+    if (!isValidNewsletterEmail(normalizedEmail)) {
+      toast.error(NEWSLETTER_MESSAGES.INVALID_EMAIL);
       return;
     }
 
     setIsSubscribing(true);
     try {
       const { error } = await supabase.from('newsletter_subscribers').insert({
-        email,
+        email: normalizedEmail,
         subscribed_at: new Date().toISOString(),
         status: 'active',
       });
-      if (error) throw error;
+      if (error) {
+        const outcome = classifyNewsletterSubscribeError(error);
+        if (outcome.status === 'already_subscribed') {
+          toast.info(outcome.message);
+          setEmail('');
+          return;
+        }
+        throw error;
+      }
 
-      toast.success('Welcome to Viridian Nexus Development Ltd. Exclusive Updates.');
+      toast.success(NEWSLETTER_MESSAGES.SUCCESS);
       setEmail('');
     } catch (error) {
-      console.error(error);
-      toast.error('An error occurred. Please try again later.');
+      const outcome = classifyNewsletterSubscribeError(error);
+      if (outcome.status === 'already_subscribed') {
+        toast.info(outcome.message);
+        setEmail('');
+      } else {
+        console.error(error);
+        toast.error(outcome.message);
+      }
     } finally {
       setIsSubscribing(false);
     }
