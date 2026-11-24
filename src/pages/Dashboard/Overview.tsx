@@ -267,11 +267,29 @@ export default function Overview() {
                   <div key={booking.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow group cursor-pointer" onClick={() => navigate(`/dashboard/booking/${booking.id}`)}>
                     <div className="p-6 border-b border-gray-100 flex justify-between items-start">
                       <div>
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${booking.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            booking.status === 'Active'
+                              ? 'bg-green-100 text-green-800'
+                              : booking.status === 'Cancelled'
+                                ? 'bg-red-100 text-red-800'
+                                : booking.status === 'On Hold'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
                           {booking.status}
                         </span>
                         <h3 className="text-lg font-bold text-gray-900 mt-3">{booking.propertyName}</h3>
-                        <p className="text-sm text-gray-500">{booking.unitType} {booking.unitNumber ? `- ${booking.unitNumber}` : ''} {booking.parkingIncluded ? ` | 🚗 Parking: ${booking.parkingIncluded}` : ''}</p>
+                        <p className="text-sm text-gray-500">
+                          {booking.unitType}
+                          {booking.unitNumber
+                            ? ` - ${booking.unitNumber}${booking.status === 'Cancelled' ? ' (Released)' : ''}`
+                            : ''}
+                          {booking.parkingIncluded
+                            ? ` | 🚗 Parking: ${booking.parkingIncluded}${booking.status === 'Cancelled' ? ' (Released)' : ''}`
+                            : ''}
+                        </p>
                       </div>
                       <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-brand-primary/10 group-hover:text-brand-primary transition-colors">
                         <ChevronRight size={20} />

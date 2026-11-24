@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, EyeOff, FileCheck2, FileSpreadsheet, FileText, Loader2, Lock, Printer, Receipt, ShieldCheck, X } from 'lucide-react';
+import { ArrowLeft, Download, ExternalLink, EyeOff, FileCheck2, FileSpreadsheet, FileText, Loader2, Lock, Printer, Receipt, ShieldCheck, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import type { Booking, BookingPayment } from '../../types';
 import {
@@ -19,6 +19,7 @@ import {
   printInvoiceElement,
 } from '../../utils/invoiceExport';
 import {
+  evaluateDocumentIssuancePolicy,
   getClientAuthorizedBookingCategories,
   getClientAuthorizedPayments,
   getDocumentVerificationInfo,
@@ -65,6 +66,11 @@ const BOOKING_LEVEL_TABS: Array<{
     category: 'receipts-summary',
     label: 'Receipts Summary',
     shortDesc: 'Summary of all cleared & partial receipts',
+  },
+  {
+    category: 'cancellation-settlement',
+    label: 'Cancellation Settlement',
+    shortDesc: 'Contract termination, asset release & refund reconciliation',
   },
 ];
 
@@ -113,22 +119,36 @@ export default function InvoicePreviewModal({
   }, [location.state]);
 
   const authorizedCategories = useMemo(
-    () => (booking && isClientView ? getClientAuthorizedBookingCategories(booking) : BOOKING_LEVEL_TABS.map((t) => t.category)),
-    [booking, isClientView]
-  );
-
-  const authorizedPayments = useMemo(
-    () => (booking && isClientView ? getClientAuthorizedPayments(booking, payments) : payments),
+    () =>
+      booking && isClientView
+        ? getClientAuthorizedBookingCategories(booking, undefined, payments)
+        : BOOKING_LEVEL_TABS.map((t) => t.category),
     [booking, payments, isClientView]
   );
 
-  const visibleTabs = useMemo(
-    () =>
-      isClientView
-        ? BOOKING_LEVEL_TABS.filter((tab) => authorizedCategories.includes(tab.category))
-        : BOOKING_LEVEL_TABS,
-    [isClientView, authorizedCategories]
-  );
+  const authorizedPayments = useMemo(() => {
+    if (!booking) return payments;
+    if (isClientView) return getClientAuthorizedPayments(booking, payments);
+    return payments.filter(
+      (p) => evaluateDocumentIssuancePolicy(booking, { kind: 'payment-doc', payment: p }, payments).canPreview
+    );
+  }, [booking, payments, isClientView]);
+
+  const visibleTabs = useMemo(() => {
+    if (isClientView) {
+      return BOOKING_LEVEL_TABS.filter((tab) => authorizedCategories.includes(tab.category));
+    }
+    if (!booking) return BOOKING_LEVEL_TABS;
+    return BOOKING_LEVEL_TABS.filter(
+      (tab) =>
+        isBookingDocKey(tab.category) &&
+        evaluateDocumentIssuancePolicy(
+          booking,
+          { kind: 'booking-doc', category: tab.category },
+          payments
+        ).canPreview
+    );
+  }, [isClientView, authorizedCategories, booking, payments]);
 
   const { selectedCategory, selectedPaymentId, hasAuthorizedContent } = useMemo(() => {
     const rawCat =
@@ -136,12 +156,42 @@ export default function InvoicePreviewModal({
     const rawPayId =
       selection && selection.propKey === propKey
         ? selection.paymentId
-        : initialPaymentId || payments[0]?.id || '';
+        : initialPaymentId || authorizedPayments[0]?.id || '';
 
-    if (!isClientView || !booking) {
+    if (!booking) {
       return {
         selectedCategory: rawCat,
         selectedPaymentId: rawPayId,
+        hasAuthorizedContent: true,
+      };
+    }
+
+    if (!isClientView) {
+      if (isBookingDocKey(rawCat)) {
+        const policy = evaluateDocumentIssuancePolicy(
+          booking,
+          { kind: 'booking-doc', category: rawCat },
+          payments
+        );
+        return {
+          selectedCategory: policy.canPreview
+            ? rawCat
+            : visibleTabs[0]?.category ?? 'account-statement',
+          selectedPaymentId: rawPayId,
+          hasAuthorizedContent: true,
+        };
+      }
+      const matched = authorizedPayments.find((p) => p.id === rawPayId);
+      if (matched) {
+        return {
+          selectedCategory: classifyPaymentDocumentCategory(matched).category,
+          selectedPaymentId: matched.id,
+          hasAuthorizedContent: true,
+        };
+      }
+      return {
+        selectedCategory: visibleTabs[0]?.category ?? 'account-statement',
+        selectedPaymentId: '',
         hasAuthorizedContent: true,
       };
     }
@@ -189,18 +239,8 @@ export default function InvoicePreviewModal({
     booking,
     authorizedCategories,
     authorizedPayments,
+    visibleTabs,
   ]);
-
-  const invoiceDoc = useMemo(() => {
-    if (!booking || !hasAuthorizedContent) return null;
-    return buildInvoiceDocument({
-      booking,
-      payments,
-      category: selectedCategory,
-      targetPaymentId: selectedPaymentId || undefined,
-      audience,
-    });
-  }, [booking, hasAuthorizedContent, payments, selectedCategory, selectedPaymentId, audience]);
 
   const currentPaymentObj = useMemo(
     () =>
@@ -213,10 +253,51 @@ export default function InvoicePreviewModal({
   const verificationInfo = useMemo(
     () =>
       booking
-        ? getDocumentVerificationInfo(booking, selectedCategory, currentPaymentObj)
+        ? getDocumentVerificationInfo(booking, selectedCategory, currentPaymentObj, payments)
         : { verified: false },
-    [booking, selectedCategory, currentPaymentObj]
+    [booking, selectedCategory, currentPaymentObj, payments]
   );
+
+  const invoiceDoc = useMemo(() => {
+    if (!booking || !hasAuthorizedContent) return null;
+    return buildInvoiceDocument({
+      booking,
+      payments,
+      category: selectedCategory,
+      targetPaymentId: selectedPaymentId || undefined,
+      audience,
+      verificationCode: verificationInfo.verified ? verificationInfo.verificationCode : undefined,
+      verificationOrigin: typeof window !== 'undefined' ? window.location.origin : undefined,
+    });
+  }, [
+    booking,
+    hasAuthorizedContent,
+    payments,
+    selectedCategory,
+    selectedPaymentId,
+    audience,
+    verificationInfo.verified,
+    verificationInfo.verificationCode,
+  ]);
+
+  const currentIssuancePolicy = useMemo(() => {
+    if (!booking) return null;
+    if (isBookingDocKey(selectedCategory)) {
+      return evaluateDocumentIssuancePolicy(
+        booking,
+        { kind: 'booking-doc', category: selectedCategory },
+        payments
+      );
+    }
+    if (currentPaymentObj) {
+      return evaluateDocumentIssuancePolicy(
+        booking,
+        { kind: 'payment-doc', payment: currentPaymentObj },
+        payments
+      );
+    }
+    return null;
+  }, [booking, selectedCategory, currentPaymentObj, payments]);
 
   useEffect(() => {
     if (!isOpen || !invoiceDoc) return;
@@ -364,6 +445,7 @@ export default function InvoicePreviewModal({
         nextStatus,
         actorName,
         actorId,
+        payments,
       });
       onBookingUpdated?.(updated);
       toast.success(
@@ -373,7 +455,8 @@ export default function InvoicePreviewModal({
       );
     } catch (err) {
       console.error('Failed to update invoice release status:', err);
-      toast.error('Failed to update client invoice visibility');
+      const msg = err instanceof Error ? err.message : 'Failed to update client invoice visibility';
+      toast.error(msg);
     } finally {
       setUpdatingRelease(false);
     }
@@ -470,31 +553,55 @@ export default function InvoicePreviewModal({
 
           {/* Primary Actions */}
           <div className="flex flex-wrap items-center gap-2">
-            {!isClientView && (isBookingDocKey(selectedCategory) || Boolean(currentPaymentObj)) && (
-              <button
-                type="button"
-                onClick={() => void handleToggleReleaseStatus()}
-                disabled={updatingRelease || printing || downloading}
-                className={`px-3.5 py-2 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
-                  verificationInfo.verified
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200'
-                    : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200'
-                }`}
-                title={
-                  verificationInfo.verified
-                    ? 'Currently visible on Client Dashboard — click to withdraw'
-                    : 'Verify & issue this document so it appears on the Client Dashboard'
-                }
+            {verificationInfo.verified && (
+              <a
+                href={invoiceDoc.qrPayload}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 inline-flex items-center gap-1.5 transition-colors"
+                title="Open the live public QR verification page for this document"
               >
-                {updatingRelease ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : verificationInfo.verified ? (
-                  <EyeOff size={14} />
-                ) : (
-                  <ShieldCheck size={14} />
-                )}
-                {verificationInfo.verified ? 'Issued to Client (Withdraw)' : 'Verify & Issue to Client'}
-              </button>
+                <ExternalLink size={13} />
+                Verify Page
+              </a>
+            )}
+            {!isClientView && (isBookingDocKey(selectedCategory) || Boolean(currentPaymentObj)) && (
+              currentIssuancePolicy && !currentIssuancePolicy.canIssue && !verificationInfo.verified ? (
+                <button
+                  type="button"
+                  disabled
+                  title={currentIssuancePolicy.reason || 'Document cannot be issued for this booking status'}
+                  className="px-3.5 py-2 rounded-lg text-xs font-bold border border-gray-200 bg-gray-100 text-gray-500 inline-flex items-center gap-1.5 cursor-not-allowed"
+                >
+                  <Lock size={14} />
+                  Issuance Locked
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleToggleReleaseStatus()}
+                  disabled={updatingRelease || printing || downloading}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
+                    verificationInfo.verified
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-200'
+                      : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200'
+                  }`}
+                  title={
+                    verificationInfo.verified
+                      ? 'Currently visible on Client Dashboard — click to withdraw'
+                      : 'Verify & issue this document so it appears on the Client Dashboard'
+                  }
+                >
+                  {updatingRelease ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : verificationInfo.verified ? (
+                    <EyeOff size={14} />
+                  ) : (
+                    <ShieldCheck size={14} />
+                  )}
+                  {verificationInfo.verified ? 'Issued to Client (Withdraw)' : 'Verify & Issue to Client'}
+                </button>
+              )
             )}
 
             <button
@@ -563,6 +670,7 @@ export default function InvoicePreviewModal({
                       {tab.category === 'account-statement' && <FileText size={13} />}
                       {tab.category === 'outstanding-bundle' && <Receipt size={13} />}
                       {tab.category === 'receipts-summary' && <FileCheck2 size={13} />}
+                      {tab.category === 'cancellation-settlement' && <FileCheck2 size={13} />}
                       {tab.label}
                     </button>
                   );

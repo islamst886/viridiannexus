@@ -18,19 +18,25 @@ import type {
   ProfileDBRow,
 } from '../../types';
 import {
-  ArrowLeft, ArrowRight, CheckCircle, Clock, AlertCircle, FileText,
-  DollarSign, Loader2, Save, User as UserIcon, Building, ShieldCheck,
+  ArrowLeft, ArrowRight, Banknote, CheckCircle, Clock, AlertCircle, FileText,
+  DollarSign, Loader2, Lock, Save, User as UserIcon, Building, ShieldCheck,
   X, RefreshCw, AlertTriangle, Printer, Car, PauseCircle, PlayCircle, MinusCircle, XCircle
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { mapBookingFromDB, mapPaymentFromDB, mapActivityFromDB } from '../../utils/mappers';
 import { STAGES } from '../../utils/bookingStageGates';
 import {
+  computeCancellationSettlement,
+  isCancellationFeeRow,
+  isRefundPaymentRow,
+} from '../../utils/bookingCancellation';
+import {
   classifyPaymentDocumentCategory,
   type InvoiceCategory,
 } from '../../utils/invoiceBuilder';
 import {
   BOOKING_INVOICE_DOC_LABELS,
+  evaluateDocumentIssuancePolicy,
   getDocumentVerificationInfo,
   isBookingDocAuthorizedForClient,
   isPaymentInvoiceAuthorizedForClient,
@@ -56,6 +62,7 @@ import CancelBookingModal from './CancelBookingModal';
 import ReleaseParkingModal from './ReleaseParkingModal';
 import AddParkingModal from './AddParkingModal';
 import ChangeParkingModal from './ChangeParkingModal';
+import RefundDisbursementModal from './RefundDisbursementModal';
 
 interface LinkedUserDetails {
   id: string;
@@ -143,6 +150,7 @@ export default function AdminBookingDetail() {
   const [isReleaseParkingModalOpen, setIsReleaseParkingModalOpen] = useState(false);
   const [isAddParkingModalOpen, setIsAddParkingModalOpen] = useState(false);
   const [isChangeParkingModalOpen, setIsChangeParkingModalOpen] = useState(false);
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [invoiceModalState, setInvoiceModalState] = useState<{
     isOpen: boolean;
     category: InvoiceCategory;
@@ -389,6 +397,7 @@ export default function AdminBookingDetail() {
         nextStatus,
         actorName: adminName,
         actorId: adminUid,
+        payments,
       });
       setBooking(updated);
       toast.success(
@@ -399,7 +408,8 @@ export default function AdminBookingDetail() {
       void fetchActivity();
     } catch (err) {
       console.error('Failed to update client invoice release:', err);
-      toast.error('Failed to update client document visibility');
+      const msg = err instanceof Error ? err.message : 'Failed to update client document visibility';
+      toast.error(msg);
     } finally {
       setReleasingDocKey(null);
     }
@@ -431,6 +441,17 @@ export default function AdminBookingDetail() {
     booking.totalPrice > 0
       ? Math.min(100, Math.round(((booking.totalPaid || 0) / booking.totalPrice) * 100))
       : 0;
+  const settlement = computeCancellationSettlement(booking, payments);
+  const portalDocKeys: BookingInvoiceDocumentKey[] =
+    booking.status === 'Cancelled'
+      ? [
+          'cancellation-settlement',
+          'account-statement',
+          'receipts-summary',
+          'booking-summary',
+          'outstanding-bundle',
+        ]
+      : ['booking-summary', 'account-statement', 'outstanding-bundle', 'receipts-summary'];
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans">
@@ -476,7 +497,11 @@ export default function AdminBookingDetail() {
             <button
               type="button"
               onClick={() =>
-                setInvoiceModalState({ isOpen: true, category: 'booking-summary' })
+                setInvoiceModalState({
+                  isOpen: true,
+                  category:
+                    booking.status === 'Cancelled' ? 'cancellation-settlement' : 'booking-summary',
+                })
               }
               className="h-9 px-3.5 bg-brand-dark text-brand-accent rounded-lg text-xs font-bold hover:bg-brand-primary hover:text-white transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shadow-sm"
             >
@@ -590,17 +615,81 @@ export default function AdminBookingDetail() {
                     <AlertTriangle size={24} />
                   </div>
                   <div className="flex-1">
-                    <h2 className="text-red-800 font-bold text-lg mb-1">Booking Cancelled</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                      <h2 className="text-red-800 font-bold text-lg">Booking Cancelled</h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white border border-red-200 text-red-800">
+                        {settlement.settlementStatusLabel}
+                      </span>
+                    </div>
                     <p className="text-red-700 text-sm mb-3">
                       This booking was cancelled on{' '}
                       <span className="font-semibold">{formatDate(cancelDate)}</span> by{' '}
-                      <span className="font-semibold">{cancelledBy}</span>.
+                      <span className="font-semibold">{cancelledBy}</span>. Assigned unit &amp;
+                      parking assets have been released.
                     </p>
                     <div className="bg-white/80 border border-red-100 rounded-lg p-4 text-sm text-gray-800 shadow-sm relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-red-300 before:rounded-l-lg">
                       <strong className="block text-xs text-red-800 uppercase font-bold mb-1 tracking-wider">
                         Cancellation Note
                       </strong>
                       <span className="italic">"{cancellationNote}"</span>
+                    </div>
+
+                    {settlement.grossCollected > 0 && (
+                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/90 border border-red-100 rounded-lg p-3 text-xs">
+                        <div>
+                          <span className="text-gray-500 block">Gross Collected</span>
+                          <strong className="text-gray-900">
+                            {formatMoney(settlement.grossCollected)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-gray-500 block">Cancellation Fee</span>
+                          <strong className="text-red-700">
+                            {formatMoney(settlement.cancellationFee)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-gray-500 block">Net Refundable</span>
+                          <strong className="text-gray-900">
+                            {formatMoney(settlement.netRefundable)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-gray-500 block">Remaining Refund</span>
+                          <strong className="text-cyan-800">
+                            {formatMoney(settlement.refundRemaining)}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setInvoiceModalState({
+                            isOpen: true,
+                            category: 'cancellation-settlement',
+                          })
+                        }
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white border border-red-200 text-red-800 hover:bg-red-100 inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <Printer size={13} /> Cancellation Settlement PDF
+                      </button>
+                      {settlement.grossCollected > 0 &&
+                        (settlement.refundRemaining > 0 ||
+                          settlement.settlementStatus === 'unsettled-legacy') && (
+                          <button
+                            type="button"
+                            onClick={() => setIsRefundModalOpen(true)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-cyan-700 text-white hover:bg-cyan-800 inline-flex items-center gap-1.5 transition-colors shadow-sm"
+                          >
+                            <Banknote size={13} />
+                            {settlement.settlementStatus === 'unsettled-legacy'
+                              ? 'Initialize Settlement / Refund'
+                              : 'Disburse Refund'}
+                          </button>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -741,21 +830,45 @@ export default function AdminBookingDetail() {
                   </div>
                   <div>
                     <span className="text-gray-500 block text-xs font-bold uppercase">
-                      Unit Number
+                      {booking.status === 'Cancelled' ? 'Unit Number (Released)' : 'Unit Number'}
                     </span>{' '}
-                    <span className="font-medium text-gray-900">{booking.unitNumber || 'TBD'}</span>
+                    <span className="font-medium text-gray-900">
+                      {booking.unitNumber || 'TBD'}
+                    </span>
+                    {booking.status === 'Cancelled' && booking.unitNumber && (
+                      <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold uppercase bg-gray-100 text-gray-500 rounded">
+                        Released
+                      </span>
+                    )}
                   </div>
                   {booking.parkingIncluded && (
                     <div>
                       <span className="text-gray-500 block text-xs font-bold uppercase">
-                        Parking Assigned
+                        {booking.status === 'Cancelled' ? 'Parking (Released)' : 'Parking Assigned'}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900 inline-flex items-center gap-1.5">
-                          <Car size={15} className="text-brand-primary shrink-0" />
+                        <span
+                          className={`font-medium inline-flex items-center gap-1.5 ${
+                            booking.status === 'Cancelled'
+                              ? 'text-gray-500 line-through'
+                              : 'text-gray-900'
+                          }`}
+                        >
+                          <Car
+                            size={15}
+                            className={`shrink-0 ${
+                              booking.status === 'Cancelled'
+                                ? 'text-gray-400'
+                                : 'text-brand-primary'
+                            }`}
+                          />
                           <span>{booking.parkingIncluded}</span>
                         </span>
-                        {booking.status !== 'Cancelled' && (
+                        {booking.status === 'Cancelled' ? (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase bg-gray-100 text-gray-500 rounded">
+                            Released
+                          </span>
+                        ) : (
                           <button
                             type="button"
                             onClick={() => setIsReleaseParkingModalOpen(true)}
@@ -785,46 +898,56 @@ export default function AdminBookingDetail() {
                 </div>
 
                 <div className="space-y-2.5 mt-4">
-                  {(
-                    [
-                      'booking-summary',
-                      'account-statement',
-                      'outstanding-bundle',
-                      'receipts-summary',
-                    ] as BookingInvoiceDocumentKey[]
-                  ).map((docKey) => {
-                    const isIssued = isBookingDocAuthorizedForClient(booking, docKey);
-                    const info = getDocumentVerificationInfo(booking, docKey);
+                  {portalDocKeys.map((docKey) => {
+                    const policy = evaluateDocumentIssuancePolicy(
+                      booking,
+                      { kind: 'booking-doc', category: docKey },
+                      payments
+                    );
+                    const isIssued = isBookingDocAuthorizedForClient(
+                      booking,
+                      docKey,
+                      undefined,
+                      payments
+                    );
+                    const info = getDocumentVerificationInfo(booking, docKey, undefined, payments);
                     const busy = releasingDocKey === `doc:${docKey}`;
-                    const canIssueDoc = !(booking.status === 'Cancelled' && docKey === 'outstanding-bundle');
 
                     return (
                       <div
                         key={docKey}
-                        className="flex items-center justify-between gap-2 p-2.5 rounded-lg border border-gray-100 bg-gray-50/70"
+                        className={`flex items-center justify-between gap-2 p-2.5 rounded-lg border ${
+                          !policy.canPreview
+                            ? 'border-gray-100 bg-gray-100/70 opacity-75'
+                            : 'border-gray-100 bg-gray-50/70'
+                        }`}
                       >
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-gray-900 truncate">
                             {BOOKING_INVOICE_DOC_LABELS[docKey]}
                           </div>
-                          <div className="text-[11px] text-gray-500 truncate">
-                            {isIssued
-                              ? `Issued${info.issuedBy ? ` by ${info.issuedBy}` : ''}`
-                              : 'Internal only (Hidden from Client)'}
+                          <div className="text-[11px] text-gray-500 truncate" title={policy.reason}>
+                            {!policy.canIssue && !isIssued
+                              ? policy.reason || 'Unavailable for this booking status'
+                              : isIssued
+                                ? `Issued${info.issuedBy ? ` by ${info.issuedBy}` : ''}`
+                                : 'Internal only (Hidden from Client)'}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setInvoiceModalState({ isOpen: true, category: docKey })
-                            }
-                            className="px-2 py-1 text-[11px] font-bold text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-100 transition-colors"
-                            title="Preview document"
-                          >
-                            Preview
-                          </button>
-                          {canIssueDoc && (
+                          {policy.canPreview && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setInvoiceModalState({ isOpen: true, category: docKey })
+                              }
+                              className="px-2 py-1 text-[11px] font-bold text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+                              title="Preview document"
+                            >
+                              Preview
+                            </button>
+                          )}
+                          {policy.canIssue || isIssued ? (
                             <button
                               type="button"
                               disabled={busy}
@@ -849,6 +972,13 @@ export default function AdminBookingDetail() {
                               {busy && <Loader2 size={11} className="animate-spin" />}
                               {isIssued ? 'Issued' : 'Verify & Issue'}
                             </button>
+                          ) : (
+                            <span
+                              className="px-2 py-1 text-[10px] font-bold rounded border border-gray-200 bg-gray-100 text-gray-400 inline-flex items-center gap-1"
+                              title={policy.reason}
+                            >
+                              <Lock size={10} /> Locked
+                            </span>
                           )}
                         </div>
                       </div>
@@ -885,12 +1015,26 @@ export default function AdminBookingDetail() {
                   </div>
                   <div>
                     <p className="text-brand-neutral/60 text-xs font-bold uppercase mb-1">
-                      Balance Due
+                      {booking.status === 'Cancelled' && settlement.grossCollected > 0
+                        ? 'Refund Remaining'
+                        : 'Balance Due'}
                     </p>
                     <p
-                      className={`text-2xl font-bold ${booking.balanceDue > 0 ? 'text-red-400' : 'text-brand-neutral'}`}
+                      className={`text-2xl font-bold ${
+                        booking.status === 'Cancelled'
+                          ? settlement.refundRemaining > 0
+                            ? 'text-cyan-300'
+                            : 'text-brand-neutral'
+                          : booking.balanceDue > 0
+                            ? 'text-red-400'
+                            : 'text-brand-neutral'
+                      }`}
                     >
-                      {formatMoney(booking.balanceDue)}
+                      {booking.status === 'Cancelled'
+                        ? formatMoney(
+                            settlement.grossCollected > 0 ? settlement.refundRemaining : 0
+                          )
+                        : formatMoney(booking.balanceDue)}
                     </p>
                   </div>
                 </div>
@@ -901,7 +1045,9 @@ export default function AdminBookingDetail() {
                   ></div>
                 </div>
                 <p className="text-xs text-brand-neutral/60 text-right">
-                  {completionPct}% Completed
+                  {booking.status === 'Cancelled'
+                    ? `Cancelled · ${settlement.settlementStatusLabel}`
+                    : `${completionPct}% Completed`}
                 </p>
               </div>
 
@@ -1013,26 +1159,53 @@ export default function AdminBookingDetail() {
                         </tr>
                       ) : (
                         payments.map((p) => {
+                          const isRefundRow = isRefundPaymentRow(p);
+                          const isFeeRow = isCancellationFeeRow(p);
                           const isOverdue =
+                            booking.status !== 'Cancelled' &&
+                            !isRefundRow &&
+                            !isFeeRow &&
                             p.status === 'Scheduled' &&
                             p.scheduledDate != null &&
                             p.scheduledDate !== '' &&
                             new Date(p.scheduledDate) < new Date();
 
                           let statusBadge = '';
-                          if (p.status === 'Paid') statusBadge = 'bg-green-100 text-green-800';
+                          if (p.status === 'Paid' || p.status === 'Refunded')
+                            statusBadge = 'bg-green-100 text-green-800';
                           else if (p.status === 'Partially Paid')
                             statusBadge = 'bg-amber-100 text-amber-800';
-                          else if (p.status === 'Waived') statusBadge = 'bg-gray-200 text-gray-800';
+                          else if (p.status === 'Partially Paid (Closed)')
+                            statusBadge = 'bg-amber-100 text-amber-900';
+                          else if (p.status === 'Partially Refunded')
+                            statusBadge = 'bg-cyan-100 text-cyan-800';
+                          else if (p.status === 'Refund Pending')
+                            statusBadge = 'bg-amber-100 text-amber-800';
+                          else if (p.status === 'Deducted')
+                            statusBadge = 'bg-red-100 text-red-800';
+                          else if (p.status === 'Voided')
+                            statusBadge = 'bg-gray-100 text-gray-500 line-through';
+                          else if (p.status === 'Waived')
+                            statusBadge = 'bg-gray-200 text-gray-800';
                           else if (isOverdue) statusBadge = 'bg-red-100 text-red-800';
                           else statusBadge = 'bg-blue-50 text-blue-800';
 
                           const docMeta = classifyPaymentDocumentCategory(p);
+                          const rowPolicy = evaluateDocumentIssuancePolicy(
+                            booking,
+                            { kind: 'payment-doc', payment: p },
+                            payments
+                          );
                           const isClientVisible = isPaymentInvoiceAuthorizedForClient(booking, p);
                           const rowBusy = releasingDocKey === `pay:${p.id}`;
 
                           return (
-                            <tr key={p.id} className="hover:bg-gray-50">
+                            <tr
+                              key={p.id}
+                              className={
+                                p.status === 'Voided' ? 'bg-gray-50/70 opacity-70' : 'hover:bg-gray-50'
+                              }
+                            >
                               <td className="px-6 py-4 font-semibold text-gray-900">
                                 {p.type} {p.installmentNumber ? `#${p.installmentNumber}` : ''}
                               </td>
@@ -1040,7 +1213,9 @@ export default function AdminBookingDetail() {
                                 {formatDate(p.scheduledDate)}
                               </td>
                               <td className="px-6 py-4 font-bold text-gray-900">
-                                {formatMoney(p.scheduledAmount)}
+                                {isRefundRow
+                                  ? `-${formatMoney(Math.abs(p.scheduledAmount))}`
+                                  : formatMoney(p.scheduledAmount)}
                               </td>
                               <td className="px-6 py-4">
                                 <span
@@ -1049,14 +1224,27 @@ export default function AdminBookingDetail() {
                                   {isOverdue ? 'Overdue' : p.status}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 font-bold text-green-600">
-                                {p.receivedAmount > 0 ? formatMoney(p.receivedAmount) : '—'}
+                              <td
+                                className={`px-6 py-4 font-bold ${
+                                  isRefundRow ? 'text-cyan-700' : 'text-green-600'
+                                }`}
+                              >
+                                {isRefundRow
+                                  ? Math.abs(p.receivedAmount) > 0
+                                    ? `-${formatMoney(Math.abs(p.receivedAmount))}`
+                                    : '—'
+                                  : p.receivedAmount > 0
+                                    ? formatMoney(p.receivedAmount)
+                                    : '—'}
                               </td>
                               <td className="px-6 py-4 text-gray-500">{p.paymentMode || '—'}</td>
                               <td className="px-6 py-4 text-right">
                                 <div className="inline-flex items-center justify-end gap-2">
                                   {p.status !== 'Paid' &&
                                     p.status !== 'Waived' &&
+                                    p.status !== 'Voided' &&
+                                    !isRefundRow &&
+                                    !isFeeRow &&
                                     booking.status !== 'Cancelled' && (
                                       <button
                                         type="button"
@@ -1069,49 +1257,84 @@ export default function AdminBookingDetail() {
                                         Record
                                       </button>
                                     )}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setInvoiceModalState({
-                                        isOpen: true,
-                                        category: docMeta.category,
-                                        paymentId: p.id,
-                                      })
-                                    }
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-gray-100 text-gray-700 hover:bg-brand-dark hover:text-brand-accent transition-colors"
-                                    title="Preview, print, or download PDF"
-                                  >
-                                    <Printer size={12} />
-                                    {docMeta.actionLabel}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={rowBusy}
-                                    onClick={() =>
-                                      void handleToggleInvoiceRelease(
-                                        { kind: 'payment-doc', payment: p },
-                                        isClientVisible ? 'withheld' : 'issued',
-                                        `pay:${p.id}`
-                                      )
-                                    }
-                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold border transition-colors disabled:opacity-50 ${
-                                      isClientVisible
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
-                                    }`}
-                                    title={
-                                      isClientVisible
-                                        ? 'Visible in Client Dashboard — click to hide/withhold'
-                                        : 'Verify & issue this invoice to Client Dashboard'
-                                    }
-                                  >
-                                    {rowBusy ? (
-                                      <Loader2 size={11} className="animate-spin" />
-                                    ) : (
-                                      <ShieldCheck size={11} />
+                                  {isRefundRow &&
+                                    (p.status === 'Refund Pending' ||
+                                      p.status === 'Partially Refunded') && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setIsRefundModalOpen(true)}
+                                        className="text-cyan-700 font-bold hover:underline"
+                                      >
+                                        Disburse
+                                      </button>
                                     )}
-                                    {isClientVisible ? 'Issued' : 'Issue'}
-                                  </button>
+                                  {rowPolicy.canPreview ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setInvoiceModalState({
+                                            isOpen: true,
+                                            category: docMeta.category,
+                                            paymentId: p.id,
+                                          })
+                                        }
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-gray-100 text-gray-700 hover:bg-brand-dark hover:text-brand-accent transition-colors"
+                                        title="Preview, print, or download PDF"
+                                      >
+                                        <Printer size={12} />
+                                        {docMeta.actionLabel}
+                                      </button>
+                                      {rowPolicy.canIssue || isClientVisible ? (
+                                        <button
+                                          type="button"
+                                          disabled={rowBusy}
+                                          onClick={() =>
+                                            void handleToggleInvoiceRelease(
+                                              { kind: 'payment-doc', payment: p },
+                                              isClientVisible ? 'withheld' : 'issued',
+                                              `pay:${p.id}`
+                                            )
+                                          }
+                                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold border transition-colors disabled:opacity-50 ${
+                                            isClientVisible
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200'
+                                              : 'bg-white text-gray-600 border-gray-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
+                                          }`}
+                                          title={
+                                            isClientVisible
+                                              ? 'Visible in Client Dashboard — click to hide/withhold'
+                                              : 'Verify & issue this invoice to Client Dashboard'
+                                          }
+                                        >
+                                          {rowBusy ? (
+                                            <Loader2 size={11} className="animate-spin" />
+                                          ) : (
+                                            <ShieldCheck size={11} />
+                                          )}
+                                          {isClientVisible ? 'Issued' : 'Issue'}
+                                        </button>
+                                      ) : (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold border border-gray-200 bg-gray-100 text-gray-400"
+                                          title={rowPolicy.reason}
+                                        >
+                                          <Lock size={10} /> Locked
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span
+                                      className="text-xs font-medium text-gray-400 italic"
+                                      title={rowPolicy.reason}
+                                    >
+                                      {p.status === 'Voided'
+                                        ? 'Voided'
+                                        : isFeeRow
+                                          ? 'In Settlement'
+                                          : 'Blocked'}
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -1223,12 +1446,24 @@ export default function AdminBookingDetail() {
         isOpen={isCancelModalOpen}
         onClose={() => setIsCancelModalOpen(false)}
         booking={booking}
+        payments={payments}
+        isSuperAdmin={isSuperAdmin}
         adminName={adminName}
         adminUid={adminUid}
         onSuccess={() => {
           setIsCancelModalOpen(false);
           refreshAll();
         }}
+      />
+
+      <RefundDisbursementModal
+        isOpen={isRefundModalOpen}
+        onClose={() => setIsRefundModalOpen(false)}
+        booking={booking}
+        payments={payments}
+        adminName={adminName}
+        adminUid={adminUid}
+        onSuccess={refreshAll}
       />
 
       <ReleaseParkingModal

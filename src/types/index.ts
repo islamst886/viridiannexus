@@ -12,7 +12,18 @@ export type BookingStage =
 
 export type BookingStatus = 'Active' | 'Completed' | 'Cancelled' | 'On Hold';
 
-export type PaymentStatus = 'Scheduled' | 'Paid' | 'Partially Paid' | 'Waived' | 'Overdue';
+export type PaymentStatus =
+  | 'Scheduled'
+  | 'Paid'
+  | 'Partially Paid'
+  | 'Partially Paid (Closed)'
+  | 'Waived'
+  | 'Overdue'
+  | 'Voided'
+  | 'Deducted'
+  | 'Refund Pending'
+  | 'Partially Refunded'
+  | 'Refunded';
 
 export type MilestoneStatus = 'upcoming' | 'current' | 'completed';
 

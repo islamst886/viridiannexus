@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../../context/GlobalState';
 import { COMPANY_INFO } from '../../data/companyInfo';
 import { STAGES } from '../../utils/bookingStageGates';
+import { computeCancellationSettlement, isCancellationFeeRow, isRefundPaymentRow } from '../../utils/bookingCancellation';
 import { mapBookingFromDB, mapPaymentFromDB } from '../../utils/mappers';
 import {
   classifyPaymentDocumentCategory,
@@ -17,7 +18,7 @@ import {
 } from '../../utils/invoiceRelease';
 import InvoicePreviewModal from '../../components/invoices/InvoicePreviewModal';
 import type { Booking, BookingDBRow, BookingPayment, BookingPaymentDBRow } from '../../types';
-import { ArrowLeft, CheckCircle, Clock, FileText, Loader2, DollarSign, Printer, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle, Clock, FileText, Loader2, DollarSign, Printer, ShieldCheck } from 'lucide-react';
 
 export default function BookingDetail() {
   const { bookingId } = useParams<{ bookingId: string }>();
@@ -107,16 +108,22 @@ export default function BookingDetail() {
     );
   }
 
+  const isCancelled = booking.status === 'Cancelled';
+  const settlement = computeCancellationSettlement(booking, payments);
   const completionPct = booking.totalPrice > 0
     ? Math.min(100, Math.round(((booking.totalPaid || 0) / booking.totalPrice) * 100))
     : 0;
 
-  // Find the next payment that needs to be paid (whether it's in the future or currently overdue)
-  const upcomingPayment = payments.find(p => p.status === 'Scheduled');
-  const authorizedBookingCategories = getClientAuthorizedBookingCategories(booking);
+  // Find the next payment that needs to be paid (suppressed on Cancelled or On Hold bookings)
+  const upcomingPayment =
+    isCancelled || booking.status === 'On Hold'
+      ? undefined
+      : payments.find((p) => p.status === 'Scheduled');
+  const authorizedBookingCategories = getClientAuthorizedBookingCategories(booking, undefined, payments);
   const authorizedDocsCount = getClientTotalAuthorizedDocumentsCount(booking, payments);
   const defaultClientSelection = resolveDefaultClientDocumentSelection(booking, payments);
   const hasIssuedStatementOrReceipts =
+    authorizedBookingCategories.includes('cancellation-settlement') ||
     authorizedBookingCategories.includes('account-statement') ||
     authorizedBookingCategories.includes('receipts-summary');
   const isUpcomingAuthorized = upcomingPayment
@@ -134,7 +141,13 @@ export default function BookingDetail() {
         <div className="flex flex-wrap justify-between items-end gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-serif font-bold text-gray-900 mb-2">Booking #{booking.bookingRef}</h1>
-            <p className="text-gray-500 font-medium">{booking.propertyName} - {booking.unitType} {booking.unitNumber && `| ${booking.unitNumber}`} {booking.parkingIncluded ? ` | Parking: ${booking.parkingIncluded}` : ((booking.parkingRequested ?? 0) > 0 && ` | ${booking.parkingRequested} Parking Requested`)}</p>
+            <p className="text-gray-500 font-medium">
+              {booking.propertyName} - {booking.unitType}{' '}
+              {booking.unitNumber && `| ${booking.unitNumber}${isCancelled ? ' (Released)' : ''}`}{' '}
+              {booking.parkingIncluded
+                ? ` | Parking: ${booking.parkingIncluded}${isCancelled ? ' (Released)' : ''}`
+                : (booking.parkingRequested ?? 0) > 0 && ` | ${booking.parkingRequested} Parking Requested`}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             {authorizedDocsCount > 0 && defaultClientSelection && (
@@ -153,7 +166,17 @@ export default function BookingDetail() {
                 Verified Invoices ({authorizedDocsCount})
               </button>
             )}
-            <span className={`px-4 py-2 rounded-full text-sm font-bold ${booking.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-800'}`}>
+            <span
+              className={`px-4 py-2 rounded-full text-sm font-bold ${
+                booking.status === 'Active'
+                  ? 'bg-green-100 text-green-800'
+                  : booking.status === 'Cancelled'
+                    ? 'bg-red-100 text-red-800'
+                    : booking.status === 'On Hold'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-gray-200 text-gray-800'
+              }`}
+            >
               {booking.status}
             </span>
           </div>
@@ -164,32 +187,100 @@ export default function BookingDetail() {
           {/* Main Content */}
           <div className="md:col-span-2 space-y-8">
 
-            {/* Stage Stepper */}
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-              <h2 className="text-xl font-bold mb-8">Current Progress</h2>
-              <div className="flex items-start justify-between">
-                {STAGES.map((s, idx) => {
-                  const stageIndex = STAGES.indexOf(booking.stage as (typeof STAGES)[number]);
-                  const isCompleted = stageIndex >= idx;
-                  const isCurrent = booking.stage === s;
-
-                  // For mobile, only show a few
-                  const isMobileHidden = STAGES.length > 4 && idx % 2 !== 0 && !isCurrent;
-
-                  return (
-                    <div key={s} className={`flex-1 min-w-0 relative flex flex-col items-center ${isMobileHidden ? 'hidden md:flex' : 'flex'}`}>
-                      <div className={`relative w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold z-10 ${isCompleted ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-400'} ${isCurrent ? 'ring-4 ring-brand-primary/20' : ''}`}>
-                        {isCompleted ? <CheckCircle size={20} /> : idx + 1}
-                      </div>
-                      {idx < STAGES.length - 1 && (
-                        <div className={`hidden md:block absolute top-5 left-1/2 w-full h-1.5 -translate-y-1/2 ${stageIndex > idx ? 'bg-brand-primary' : 'bg-gray-100'}`} />
-                      )}
-                      <span className={`text-[11px] uppercase font-bold mt-3 text-center max-w-[80px] leading-tight ${isCurrent ? 'text-brand-primary' : 'text-gray-400'}`}>{s}</span>
+            {/* Stage Stepper OR Cancellation & Settlement Notice */}
+            {isCancelled ? (
+              <div className="bg-red-50/90 p-7 rounded-2xl shadow-sm border border-red-200 space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-red-100 text-red-600 rounded-full shrink-0">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h2 className="text-xl font-bold text-red-900">Booking Cancelled</h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white border border-red-200 text-red-800">
+                        {settlement.settlementStatusLabel}
+                      </span>
                     </div>
-                  );
-                })}
+                    <p className="text-sm text-red-800 mt-1">
+                      This booking has been formally cancelled and its unit &amp; parking allocation
+                      have been released. Any remaining future installments have been voided.
+                    </p>
+                  </div>
+                </div>
+
+                {settlement.grossCollected > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/90 border border-red-100 rounded-xl p-4 text-xs">
+                    <div>
+                      <span className="text-gray-500 block">Total Collected</span>
+                      <strong className="text-gray-900 text-sm">
+                        {formatMoney(settlement.grossCollected)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Deduction / Fee</span>
+                      <strong className="text-red-700 text-sm">
+                        {formatMoney(settlement.cancellationFee)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Net Refundable</span>
+                      <strong className="text-gray-900 text-sm">
+                        {formatMoney(settlement.netRefundable)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Refund Remaining</span>
+                      <strong className="text-cyan-800 text-sm">
+                        {formatMoney(settlement.refundRemaining)}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+
+                {authorizedBookingCategories.includes('cancellation-settlement') && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setInvoiceModalState({
+                          isOpen: true,
+                          category: 'cancellation-settlement',
+                        })
+                      }
+                      className="px-4 py-2 rounded-lg bg-white border border-red-200 text-red-800 hover:bg-red-100 text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                    >
+                      <Printer size={14} /> View Cancellation &amp; Settlement Statement
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+                <h2 className="text-xl font-bold mb-8">Current Progress</h2>
+                <div className="flex items-start justify-between">
+                  {STAGES.map((s, idx) => {
+                    const stageIndex = STAGES.indexOf(booking.stage as (typeof STAGES)[number]);
+                    const isCompleted = stageIndex >= idx;
+                    const isCurrent = booking.stage === s;
+
+                    // For mobile, only show a few
+                    const isMobileHidden = STAGES.length > 4 && idx % 2 !== 0 && !isCurrent;
+
+                    return (
+                      <div key={s} className={`flex-1 min-w-0 relative flex flex-col items-center ${isMobileHidden ? 'hidden md:flex' : 'flex'}`}>
+                        <div className={`relative w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold z-10 ${isCompleted ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-400'} ${isCurrent ? 'ring-4 ring-brand-primary/20' : ''}`}>
+                          {isCompleted ? <CheckCircle size={20} /> : idx + 1}
+                        </div>
+                        {idx < STAGES.length - 1 && (
+                          <div className={`hidden md:block absolute top-5 left-1/2 w-full h-1.5 -translate-y-1/2 ${stageIndex > idx ? 'bg-brand-primary' : 'bg-gray-100'}`} />
+                        )}
+                        <span className={`text-[11px] uppercase font-bold mt-3 text-center max-w-[80px] leading-tight ${isCurrent ? 'text-brand-primary' : 'text-gray-400'}`}>{s}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Payment History */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -201,17 +292,22 @@ export default function BookingDetail() {
                     onClick={() =>
                       setInvoiceModalState({
                         isOpen: true,
-                        category: authorizedBookingCategories.includes('account-statement')
-                          ? 'account-statement'
-                          : 'receipts-summary',
+                        category:
+                          isCancelled && authorizedBookingCategories.includes('cancellation-settlement')
+                            ? 'cancellation-settlement'
+                            : authorizedBookingCategories.includes('account-statement')
+                              ? 'account-statement'
+                              : 'receipts-summary',
                       })
                     }
                     className="text-xs font-bold text-brand-primary hover:text-brand-dark flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-primary/10 hover:bg-brand-primary/20 transition-colors"
                   >
                     <Printer size={14} />
-                    {authorizedBookingCategories.includes('account-statement')
-                      ? 'Verified Statement'
-                      : 'Receipts Summary'}
+                    {isCancelled && authorizedBookingCategories.includes('cancellation-settlement')
+                      ? 'Cancellation Settlement'
+                      : authorizedBookingCategories.includes('account-statement')
+                        ? 'Verified Statement'
+                        : 'Receipts Summary'}
                   </button>
                 )}
               </div>
@@ -231,11 +327,30 @@ export default function BookingDetail() {
                       <tr><td colSpan={5} className="text-center py-8 text-gray-500">No payment records found</td></tr>
                     ) : (
                       payments.map((p) => {
+                        const isRefundRow = isRefundPaymentRow(p);
+                        const isFeeRow = isCancellationFeeRow(p);
                         const dueDateObj = p.scheduledDate ? new Date(p.scheduledDate) : null;
-                        const isOverdue = p.status === 'Scheduled' && dueDateObj && !isNaN(dueDateObj.getTime()) && dueDateObj < new Date();
+                        const isOverdue =
+                          !isCancelled &&
+                          !isRefundRow &&
+                          !isFeeRow &&
+                          p.status === 'Scheduled' &&
+                          dueDateObj &&
+                          !isNaN(dueDateObj.getTime()) &&
+                          dueDateObj < new Date();
                         let statusBadge = '';
-                        if (p.status === 'Paid') statusBadge = 'bg-green-100 text-green-800';
-                        else if (p.status === 'Partially Paid') statusBadge = 'bg-amber-100 text-amber-800';
+                        if (p.status === 'Paid' || p.status === 'Refunded')
+                          statusBadge = 'bg-green-100 text-green-800';
+                        else if (p.status === 'Partially Paid' || p.status === 'Partially Paid (Closed)')
+                          statusBadge = 'bg-amber-100 text-amber-800';
+                        else if (p.status === 'Partially Refunded')
+                          statusBadge = 'bg-cyan-100 text-cyan-800';
+                        else if (p.status === 'Refund Pending')
+                          statusBadge = 'bg-amber-100 text-amber-800';
+                        else if (p.status === 'Deducted')
+                          statusBadge = 'bg-red-100 text-red-800';
+                        else if (p.status === 'Voided')
+                          statusBadge = 'bg-gray-100 text-gray-500 line-through';
                         else if (isOverdue) statusBadge = 'bg-red-100 text-red-800';
                         else statusBadge = 'bg-gray-100 text-gray-600';
 
@@ -243,15 +358,26 @@ export default function BookingDetail() {
                         const isDocAuthorized = isPaymentInvoiceAuthorizedForClient(booking, p);
 
                         return (
-                          <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                          <tr
+                            key={p.id}
+                            className={
+                              p.status === 'Voided'
+                                ? 'bg-gray-50/70 opacity-70'
+                                : 'hover:bg-gray-50 transition-colors'
+                            }
+                          >
                             <td className="px-6 py-4 font-bold text-gray-900">
                               {p.type} {p.installmentNumber ? `#${p.installmentNumber}` : ''}
                             </td>
                             <td className="px-6 py-4 text-gray-500">
-                              {p.status === 'Paid' && p.paidDate ? formatDate(p.paidDate) : formatDate(p.scheduledDate)}
+                              {(p.status === 'Paid' || p.status === 'Refunded') && p.paidDate
+                                ? formatDate(p.paidDate)
+                                : formatDate(p.scheduledDate)}
                             </td>
                             <td className="px-6 py-4 font-bold text-gray-900">
-                              {formatMoney(p.scheduledAmount)}
+                              {isRefundRow
+                                ? formatMoney(Math.abs(p.scheduledAmount))
+                                : formatMoney(p.scheduledAmount)}
                             </td>
                             <td className="px-6 py-4">
                               <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge}`}>
@@ -259,7 +385,11 @@ export default function BookingDetail() {
                               </span>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              {isDocAuthorized ? (
+                              {p.status === 'Voided' ? (
+                                <span className="text-xs font-medium text-gray-400 italic">
+                                  Voided
+                                </span>
+                              ) : isDocAuthorized ? (
                                 <button
                                   type="button"
                                   onClick={() => setInvoiceModalState({
@@ -273,7 +403,7 @@ export default function BookingDetail() {
                                 </button>
                               ) : (
                                 <span className="text-xs font-medium text-gray-400">
-                                  Not Yet Issued
+                                  {isCancelled ? 'Not Applicable' : 'Not Yet Issued'}
                                 </span>
                               )}
                             </td>
@@ -310,22 +440,42 @@ export default function BookingDetail() {
                     <p className="text-lg font-bold text-green-400 tracking-tight">{formatMoney(booking.totalPaid)}</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-brand-neutral/60 text-xs font-bold uppercase mb-1">Balance Due</p>
-                    <p className="text-lg font-bold tracking-tight">{formatMoney(booking.balanceDue)}</p>
+                    <p className="text-brand-neutral/60 text-xs font-bold uppercase mb-1">
+                      {isCancelled && settlement.grossCollected > 0 ? 'Refund Remaining' : 'Balance Due'}
+                    </p>
+                    <p className="text-lg font-bold tracking-tight">
+                      {isCancelled
+                        ? formatMoney(settlement.grossCollected > 0 ? settlement.refundRemaining : 0)
+                        : formatMoney(booking.balanceDue)}
+                    </p>
                   </div>
                 </div>
 
                 <div>
                   <div className="flex justify-between text-xs font-bold mb-2">
-                    <span className="text-brand-neutral/60">Payment Progress</span>
-                    <span className="text-brand-accent">{completionPct}%</span>
+                    <span className="text-brand-neutral/60">
+                      {isCancelled ? 'Settlement Status' : 'Payment Progress'}
+                    </span>
+                    <span className="text-brand-accent">
+                      {isCancelled ? 'Cancelled' : `${completionPct}%`}
+                    </span>
                   </div>
                   <div className="w-full bg-black/40 rounded-full h-2">
                     <div className="bg-brand-accent h-2 rounded-full" style={{ width: `${completionPct}%` }}></div>
                   </div>
                 </div>
 
-                {authorizedBookingCategories.includes('account-statement') ? (
+                {isCancelled && authorizedBookingCategories.includes('cancellation-settlement') ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setInvoiceModalState({ isOpen: true, category: 'cancellation-settlement' })
+                    }
+                    className="w-full py-2.5 bg-white/10 hover:bg-brand-accent hover:text-brand-dark text-brand-accent font-bold text-xs uppercase tracking-wider rounded-lg border border-brand-accent/30 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Printer size={14} /> Download Cancellation Settlement
+                  </button>
+                ) : authorizedBookingCategories.includes('account-statement') ? (
                   <button
                     type="button"
                     onClick={() => setInvoiceModalState({ isOpen: true, category: 'account-statement' })}
@@ -379,7 +529,10 @@ export default function BookingDetail() {
               </div>
             )}
 
-            {!upcomingPayment && booking.balanceDue === 0 && (
+            {!isCancelled &&
+              !upcomingPayment &&
+              booking.totalPrice > 0 &&
+              booking.totalPaid >= booking.totalPrice && (
               <div className="bg-green-50 p-8 rounded-2xl shadow-sm border border-green-200 text-center">
                 <CheckCircle size={48} className="text-green-500 mx-auto mb-4" />
                 <h3 className="font-bold text-lg text-green-900 mb-2">Fully Paid</h3>

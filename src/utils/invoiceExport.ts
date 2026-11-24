@@ -384,7 +384,29 @@ export const INVOICE_SHEET_STYLES = `
   .vn-tone-overdue { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
   .vn-tone-credit { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
   .vn-tone-cancelled { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .vn-tone-voided { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; text-decoration: line-through; }
+  .vn-tone-refund { background: #ecfeff; color: #155e75; border: 1px solid #a5f3fc; }
   .vn-tone-neutral { background: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; }
+
+  .vn-inv-watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-32deg);
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 84px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    color: rgba(153, 27, 27, 0.065);
+    border: 4px solid rgba(153, 27, 27, 0.065);
+    padding: 10px 30px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+    z-index: 2;
+  }
 
   /* Double Horizontal Rule from brochure theme */
   .vn-double-rule {

@@ -376,6 +376,17 @@ export function getSeoMetadataForPath(pathname: string, origin = CANONICAL_SITE_
     };
   }
 
+  if (path === '/verify') {
+    return {
+      title: `Official Document Verification | ${COMPANY_INFO.legalName}`,
+      description: `Verify official allotment invoices, payment receipts, statements, cancellation settlements, and refund vouchers issued by ${COMPANY_INFO.legalName}.`,
+      path,
+      robots: 'noindex, nofollow',
+      type: 'website',
+      image: baseImage,
+    };
+  }
+
   if (path === '/journal' || path.startsWith('/journal/')) {
     const slug = path.startsWith('/journal/') ? path.slice('/journal/'.length) : 'jolshiri-revolution';
     const article = getJournalArticle(slug);

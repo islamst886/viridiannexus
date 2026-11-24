@@ -1,5 +1,16 @@
-import { COMPANY_INFO } from '../data/companyInfo';
-import type { Booking, BookingPayment } from '../types';
+import { COMPANY_INFO } from '../data/companyInfo.js';
+import type { Booking, BookingPayment } from '../types/index.js';
+import {
+  computeCancellationSettlement,
+  isCancellationFeeRow,
+  isPositiveClientPaymentRow,
+  isRefundPaymentRow,
+  isUnpaidObligationRow,
+} from './bookingCancellation.js';
+import {
+  buildDocumentVerificationUrl,
+  normalizeInvoiceRefCode,
+} from './documentVerification.js';
 
 export type InvoiceCategory =
   | 'booking-summary'
@@ -8,7 +19,9 @@ export type InvoiceCategory =
   | 'receipts-summary'
   | 'payment-receipt'
   | 'demand-invoice'
-  | 'credit-note';
+  | 'credit-note'
+  | 'cancellation-settlement'
+  | 'refund-voucher';
 
 export interface InvoiceLineItem {
   id: string;
@@ -26,6 +39,18 @@ export interface InvoiceLineItem {
   isCredit?: boolean;
   isWaived?: boolean;
   isOverdue?: boolean;
+  isVoided?: boolean;
+  isRefund?: boolean;
+  isFee?: boolean;
+}
+
+export interface InvoiceCancellationSummary {
+  grossCollected: number;
+  cancellationFee: number;
+  netRefundable: number;
+  refundDisbursed: number;
+  refundRemaining: number;
+  settlementStatusLabel: string;
 }
 
 export interface InvoiceDocument {
@@ -37,6 +62,8 @@ export interface InvoiceDocument {
   dueDate: string | null;
   statusLabel: string;
   statusTone: 'paid' | 'partial' | 'due' | 'overdue' | 'credit' | 'neutral' | 'cancelled';
+  watermarkText?: string;
+  verificationCode?: string;
   bookingRef: string;
   qrPayload: string;
   company: typeof COMPANY_INFO;
@@ -70,6 +97,7 @@ export interface InvoiceDocument {
     overallWaivedAmount: number;
     completionPercentage: number;
   };
+  cancellationSummary?: InvoiceCancellationSummary;
   amountInWordsLabel: string;
   amountInWordsValue: string;
   remarks: string[];
@@ -178,7 +206,20 @@ export function extractReferenceFromNotes(notes: string | null | undefined): str
   return '—';
 }
 
-export function isPaymentOverdue(payment: BookingPayment, referenceDate = new Date()): boolean {
+export function isPaymentOverdue(
+  payment: BookingPayment,
+  referenceDate = new Date(),
+  bookingStatus?: string
+): boolean {
+  if (bookingStatus === 'Cancelled') return false;
+  if (
+    payment.status === 'Voided' ||
+    payment.status === 'Partially Paid (Closed)' ||
+    payment.status === 'Deducted' ||
+    isRefundPaymentRow(payment)
+  ) {
+    return false;
+  }
   if (payment.status !== 'Scheduled' && payment.status !== 'Overdue') return false;
   if (payment.status === 'Overdue') return true;
   const due = payment.dueDate || payment.scheduledDate;
@@ -200,6 +241,8 @@ export function sanitizeInvoiceFilename(raw: string): string {
 
 function deriveSequenceCode(payment: BookingPayment, index: number): string {
   const rawType = payment.type.toLowerCase();
+  if (isRefundPaymentRow(payment) || rawType.includes('refund')) return 'RFN';
+  if (isCancellationFeeRow(payment) || rawType.includes('cancellation fee')) return 'FEE';
   if (rawType.includes('down')) return 'DP';
   if (rawType.includes('parking') && Number(payment.scheduledAmount) < 0) return 'CR-PK';
   if (rawType.includes('parking')) return 'PK';
@@ -208,10 +251,24 @@ function deriveSequenceCode(payment: BookingPayment, index: number): string {
 }
 
 function inferRowInvoiceCategory(payment: BookingPayment): InvoiceCategory {
-  if (Number(payment.scheduledAmount) < 0 || payment.status === 'Waived' || payment.type.toLowerCase().includes('credit note')) {
+  if (isRefundPaymentRow(payment)) {
+    return 'refund-voucher';
+  }
+  if (isCancellationFeeRow(payment)) {
     return 'credit-note';
   }
-  if (payment.status === 'Paid' || (payment.status === 'Partially Paid' && Number(payment.receivedAmount) > 0)) {
+  if (
+    Number(payment.scheduledAmount) < 0 ||
+    payment.status === 'Waived' ||
+    payment.type.toLowerCase().includes('credit note')
+  ) {
+    return 'credit-note';
+  }
+  if (
+    payment.status === 'Paid' ||
+    payment.status === 'Partially Paid (Closed)' ||
+    (payment.status === 'Partially Paid' && Number(payment.receivedAmount) > 0)
+  ) {
     return 'payment-receipt';
   }
   return 'demand-invoice';
@@ -221,6 +278,31 @@ export function classifyPaymentDocumentCategory(payment: BookingPayment): {
   category: InvoiceCategory;
   actionLabel: string;
 } {
+  if (isRefundPaymentRow(payment)) {
+    return {
+      category: 'refund-voucher',
+      actionLabel: Math.abs(Number(payment.receivedAmount) || 0) > 0 ? 'Refund Voucher' : 'Refund Advice',
+    };
+  }
+  if (isCancellationFeeRow(payment)) {
+    return {
+      category: 'credit-note',
+      actionLabel: 'Deduction',
+    };
+  }
+  if (payment.status === 'Voided') {
+    return {
+      category: 'demand-invoice',
+      actionLabel: 'Voided',
+    };
+  }
+  if (payment.status === 'Partially Paid (Closed)') {
+    return {
+      category: 'payment-receipt',
+      actionLabel: 'Partial Receipt',
+    };
+  }
+
   const category = inferRowInvoiceCategory(payment);
   if (category === 'credit-note') {
     return {
@@ -244,23 +326,48 @@ function buildLineItem(
   payment: BookingPayment,
   sl: number,
   referenceDate: Date,
-  audience: 'admin' | 'client' = 'admin'
+  audience: 'admin' | 'client' = 'admin',
+  bookingStatus?: string
 ): InvoiceLineItem {
   const scheduled = Number(payment.scheduledAmount) || 0;
   const received = Number(payment.receivedAmount) || 0;
-  const isCredit = scheduled < 0 || payment.type.toLowerCase().includes('credit note');
+  const isRefund = isRefundPaymentRow(payment);
+  const isFee = isCancellationFeeRow(payment);
+  const isCredit =
+    !isRefund && !isFee && (scheduled < 0 || payment.type.toLowerCase().includes('credit note'));
   const isWaived = payment.status === 'Waived';
-  const overdue = isPaymentOverdue(payment, referenceDate);
+  const isVoided =
+    payment.status === 'Voided' ||
+    (bookingStatus === 'Cancelled' && isUnpaidObligationRow(payment));
+  const isClosedPartial =
+    payment.status === 'Partially Paid (Closed)' ||
+    (bookingStatus === 'Cancelled' && payment.status === 'Partially Paid' && !isRefund);
+  const overdue = isVoided ? false : isPaymentOverdue(payment, referenceDate, bookingStatus);
 
   let net = 0;
-  if (isCredit) {
+  let status = payment.status || 'Scheduled';
+  if (isRefund) {
+    net = Math.max(0, Math.abs(scheduled) - Math.abs(received));
+    status = payment.status || (net === 0 && Math.abs(received) > 0 ? 'Refunded' : 'Refund Pending');
+  } else if (isFee) {
+    net = Math.abs(scheduled);
+    status = 'Deducted';
+  } else if (isVoided) {
+    net = 0;
+    status = 'Voided';
+  } else if (isClosedPartial) {
+    net = 0;
+    status = 'Partial (Closed)';
+  } else if (isCredit) {
     net = Math.abs(scheduled);
   } else if (isWaived) {
     net = 0;
+    status = 'Waived';
   } else if (payment.status === 'Paid') {
     net = received;
   } else {
     net = Math.max(0, scheduled - received);
+    status = overdue ? 'Overdue' : payment.status || 'Scheduled';
   }
 
   return {
@@ -272,13 +379,16 @@ function buildLineItem(
     paidDate: payment.paidDate || null,
     paymentMode: payment.paymentMode || '—',
     reference: extractReferenceFromNotes(payment.notes),
-    status: isWaived ? 'Waived' : overdue ? 'Overdue' : payment.status || 'Scheduled',
+    status,
     scheduledAmount: scheduled,
     receivedAmount: received,
     netPayableOrCredit: net,
     isCredit,
     isWaived,
     isOverdue: overdue,
+    isVoided,
+    isRefund,
+    isFee,
   };
 }
 
@@ -295,6 +405,8 @@ export interface BuildInvoiceOptions {
   targetPaymentId?: string;
   issueDate?: Date;
   audience?: 'admin' | 'client';
+  verificationCode?: string;
+  verificationOrigin?: string;
 }
 
 export function buildInvoiceDocument({
@@ -304,14 +416,28 @@ export function buildInvoiceDocument({
   targetPaymentId,
   issueDate = new Date(),
   audience = 'admin',
+  verificationCode,
+  verificationOrigin,
 }: BuildInvoiceOptions): InvoiceDocument {
   const ref = booking.bookingRef || `VN-${booking.id.slice(0, 8).toUpperCase()}`;
+  const docRef = normalizeInvoiceRefCode(ref);
   const formattedIssueDate = formatInvoiceDate(issueDate.toISOString());
+  const isCancelled = booking.status === 'Cancelled';
   const totalPrice = Number(booking.totalPrice) || 0;
   const totalPaid = Number(booking.totalPaid) || 0;
-  const balanceDue = Number(booking.balanceDue) || 0;
+  const rawBalanceDue = Number(booking.balanceDue) || 0;
+  const balanceDue = isCancelled ? 0 : rawBalanceDue;
   const completionPct = totalPrice > 0 ? Math.min(100, Math.round((totalPaid / totalPrice) * 100)) : 0;
   const overallWaived = computeWaivedTotal(payments);
+  const settlement = computeCancellationSettlement(booking, payments);
+  const cancellationSummary: InvoiceCancellationSummary = {
+    grossCollected: settlement.grossCollected,
+    cancellationFee: settlement.cancellationFee,
+    netRefundable: settlement.netRefundable,
+    refundDisbursed: settlement.refundDisbursed,
+    refundRemaining: settlement.refundRemaining,
+    settlementStatusLabel: settlement.settlementStatusLabel,
+  };
 
   const clientCodeSource = booking.linkedUserId || booking.clientId || booking.id;
   const billedTo = {
@@ -323,16 +449,25 @@ export function buildInvoiceDocument({
     clientCode: clientCodeSource ? clientCodeSource.slice(0, 8).toUpperCase() : 'N/A',
   };
 
+  const rawUnitNumber = booking.unitNumber || 'TBD';
+  const unitDisplay =
+    isCancelled && rawUnitNumber !== 'TBD' ? `${rawUnitNumber} (Released)` : rawUnitNumber;
+  const rawParkingDisplay = booking.parkingIncluded
+    ? booking.parkingIncluded
+    : (booking.parkingRequested ?? 0) > 0
+      ? `${booking.parkingRequested} Spot(s) Requested`
+      : 'None';
+  const parkingDisplay =
+    isCancelled && rawParkingDisplay !== 'None'
+      ? `${rawParkingDisplay} (Released)`
+      : rawParkingDisplay;
+
   const propertySummary = {
     propertyName: booking.propertyName || 'Viridian Nexus Residence',
     location: booking.propertyLocation || 'Dhaka, Bangladesh',
     unitType: booking.unitType || 'Standard Residence',
-    unitNumber: booking.unitNumber || 'TBD',
-    parking: booking.parkingIncluded
-      ? booking.parkingIncluded
-      : (booking.parkingRequested ?? 0) > 0
-        ? `${booking.parkingRequested} Spot(s) Requested`
-        : 'None',
+    unitNumber: unitDisplay,
+    parking: parkingDisplay,
     stage: booking.stage || 'EOI',
     bookingStatus: booking.status || 'Active',
     installmentPlan: booking.installmentPlan || 'Custom Schedule',
@@ -346,36 +481,260 @@ export function buildInvoiceDocument({
   ];
 
   const baseRemarks: string[] = [];
-  if (booking.status === 'Cancelled') {
-    baseRemarks.push('Notice: This booking currently carries a CANCELLED status in the administrative ledger.');
+  if (isCancelled) {
+    baseRemarks.push(
+      'Notice: This booking has been formally CANCELLED; the unit and parking allocation have been released back to inventory and future unpaid installments are voided.'
+    );
   } else if (booking.status === 'On Hold') {
     baseRemarks.push('Notice: This booking is currently marked ON HOLD pending administrative clearance.');
   }
 
-  // Single-payment invoices / receipts / credit notes
-  if (category === 'payment-receipt' || category === 'demand-invoice' || category === 'credit-note') {
+  // Cancellation & Final Settlement Statement
+  if (category === 'cancellation-settlement') {
+    const relevantRows = payments.filter(
+      (p) =>
+        isPositiveClientPaymentRow(p) ||
+        isRefundPaymentRow(p) ||
+        isCancellationFeeRow(p) ||
+        Number(p.scheduledAmount) < 0 ||
+        p.status === 'Waived'
+    );
+    const mappedItems = relevantRows.map((p, idx) =>
+      buildLineItem(p, idx + 1, issueDate, audience, booking.status)
+    );
+    const itemsToShow: InvoiceLineItem[] =
+      mappedItems.length > 0
+        ? mappedItems
+        : [
+            {
+              id: 'cancellation-closed-record',
+              sl: 1,
+              title: `Booking Termination & Asset Release — ${propertySummary.propertyName}`,
+              subtitle: `Unit ${unitDisplay} released back to inventory. No client payments were collected prior to cancellation.`,
+              dueDate: booking.createdAt || null,
+              paidDate: booking.updatedAt || null,
+              paymentMode: '—',
+              reference: '—',
+              status: 'Closed',
+              scheduledAmount: 0,
+              receivedAmount: 0,
+              netPayableOrCredit: 0,
+            },
+          ];
+
+    let cxlStatusLabel = 'CANCELLED · CLOSED';
+    let cxlStatusTone: InvoiceDocument['statusTone'] = 'cancelled';
+    switch (settlement.settlementStatus) {
+      case 'forfeited':
+        cxlStatusLabel = 'FORFEITED / NO REFUND';
+        cxlStatusTone = 'cancelled';
+        break;
+      case 'unsettled-legacy':
+        cxlStatusLabel = 'SETTLEMENT PENDING';
+        cxlStatusTone = 'overdue';
+        break;
+      case 'refund-pending':
+        cxlStatusLabel = 'REFUND PENDING';
+        cxlStatusTone = 'partial';
+        break;
+      case 'partially-refunded':
+        cxlStatusLabel = 'PARTIALLY REFUNDED';
+        cxlStatusTone = 'partial';
+        break;
+      case 'refunded':
+        cxlStatusLabel = 'REFUND SETTLED';
+        cxlStatusTone = 'paid';
+        break;
+      default:
+        break;
+    }
+
+    const docNum = `VN-CXL-${docRef}`;
+    const qr = buildDocumentVerificationUrl({
+      origin: verificationOrigin,
+      bookingRef: ref,
+      invoiceNumber: docNum,
+      verificationCode,
+    });
+    const netAmountFocus =
+      settlement.refundRemaining > 0 ? settlement.refundRemaining : settlement.refundDisbursed;
+    const wordsLabel =
+      settlement.refundRemaining > 0
+        ? 'Net Refund Payable in Words'
+        : settlement.refundDisbursed > 0
+          ? 'Total Refund Disbursed in Words'
+          : 'Net Settlement Payable in Words';
+
+    const cxlRemarks: string[] = [...baseRemarks];
+    if (settlement.grossCollected <= 0) {
+      cxlRemarks.push(
+        'Gross collected funds prior to termination: ৳ 0. Both parties carry zero outstanding balance.'
+      );
+    } else {
+      cxlRemarks.push(
+        `Financial Reconciliation: Gross Collected ${formatInvoiceMoney(settlement.grossCollected)}${settlement.cancellationFee > 0 ? ` less Cancellation Fee ${formatInvoiceMoney(settlement.cancellationFee)}` : ''} = Net Refundable ${formatInvoiceMoney(settlement.netRefundable)} (Disbursed: ${formatInvoiceMoney(settlement.refundDisbursed)}, Remaining: ${formatInvoiceMoney(settlement.refundRemaining)}).`
+      );
+    }
+    if (settlement.voidedCount > 0 || settlement.unpaidObligationRows.length > 0) {
+      const voidCount = settlement.voidedCount || settlement.unpaidObligationRows.length;
+      cxlRemarks.push(
+        `${voidCount} previously scheduled/unpaid obligation(s) have been permanently voided upon contract cancellation.`
+      );
+    }
+
+    return {
+      category: 'cancellation-settlement',
+      documentTitle: 'CANCELLATION & FINAL SETTLEMENT',
+      documentSubtitle: 'Contract Termination, Asset Release & Financial Reconciliation',
+      invoiceNumber: docNum,
+      issueDate: formattedIssueDate,
+      dueDate: settlement.primaryRefundRow?.dueDate
+        ? formatInvoiceDate(settlement.primaryRefundRow.dueDate)
+        : null,
+      statusLabel: cxlStatusLabel,
+      statusTone: cxlStatusTone,
+      watermarkText: 'CANCELLED',
+      ...(verificationCode ? { verificationCode } : {}),
+      bookingRef: ref,
+      qrPayload: qr,
+      company: COMPANY_INFO,
+      billedTo,
+      propertySummary,
+      items: itemsToShow,
+      financialSummary: {
+        totalAgreedPrice: totalPrice,
+        totalBilledInDoc: settlement.netRefundable,
+        totalPaidInDoc: settlement.refundDisbursed,
+        documentNetAmount: netAmountFocus,
+        overallTotalPaid: settlement.grossCollected,
+        overallBalanceDue: 0,
+        overallWaivedAmount: overallWaived,
+        completionPercentage: completionPct,
+      },
+      cancellationSummary,
+      amountInWordsLabel: wordsLabel,
+      amountInWordsValue: numberToBDTWords(netAmountFocus),
+      remarks: cxlRemarks,
+      paymentInstructions: [
+        `All refund disbursements are issued exclusively via Account Payee Cheque, Pay Order, or verified BEFTN/RTGS bank transfer to the allottee's verified bank account.`,
+        `Historical payment receipts remain valid strictly as proof of prior remittances; unit ${unitDisplay} carries no active allotment claim.`,
+      ],
+    };
+  }
+
+  // Single-payment invoices / receipts / credit notes / refund vouchers
+  if (
+    category === 'payment-receipt' ||
+    category === 'demand-invoice' ||
+    category === 'credit-note' ||
+    category === 'refund-voucher'
+  ) {
     const idx = payments.findIndex((p) => p.id === targetPaymentId);
-    const selected = (idx >= 0 ? payments[idx] : payments[0]) ?? {
-      id: 'ad-hoc',
+    const defaultRefundRow =
+      category === 'refund-voucher' ? settlement.primaryRefundRow ?? payments[0] : payments[0];
+    const selected = (idx >= 0 ? payments[idx] : defaultRefundRow) ?? {
+      id: category === 'refund-voucher' ? 'ad-hoc-refund' : 'ad-hoc',
       bookingId: booking.id,
-      type: 'Down Payment',
-      scheduledAmount: booking.downPaymentAmount || booking.totalPrice,
-      receivedAmount: 0,
-      status: 'Scheduled',
+      type: category === 'refund-voucher' ? 'Refund Payout' : 'Down Payment',
+      scheduledAmount:
+        category === 'refund-voucher'
+          ? -settlement.netRefundable
+          : booking.downPaymentAmount || booking.totalPrice,
+      receivedAmount: category === 'refund-voucher' ? -settlement.refundDisbursed : 0,
+      status:
+        category === 'refund-voucher'
+          ? settlement.refundDisbursed >= settlement.netRefundable && settlement.netRefundable > 0
+            ? 'Refunded'
+            : settlement.refundDisbursed > 0
+              ? 'Partially Refunded'
+              : 'Refund Pending'
+          : 'Scheduled',
       paymentMode: 'Bank Transfer',
       notes: '',
     };
     const safeIdx = idx >= 0 ? idx : 0;
-    const lineItem = buildLineItem(selected, 1, issueDate, audience);
+    const lineItem = buildLineItem(selected, 1, issueDate, audience, booking.status);
     const seqCode = deriveSequenceCode(selected, safeIdx);
     const effectiveCategory = targetPaymentId ? inferRowInvoiceCategory(selected) : category;
     const isParkingAddon = selected.type.toLowerCase().includes('parking') && selected.scheduledAmount >= 0;
 
+    if (effectiveCategory === 'refund-voucher' || category === 'refund-voucher') {
+      const scheduledAbs = Math.abs(Number(selected.scheduledAmount) || 0);
+      const disbursedAbs = Math.abs(Number(selected.receivedAmount) || 0);
+      const remainingAbs = Math.max(0, scheduledAbs - disbursedAbs);
+      const isDisbursed = disbursedAbs > 0;
+      const isFullRefund = scheduledAbs > 0 && remainingAbs === 0;
+      const docNum = `VN-RFN-${docRef}-${seqCode}`;
+      const qr = buildDocumentVerificationUrl({
+        origin: verificationOrigin,
+        bookingRef: ref,
+        invoiceNumber: docNum,
+        verificationCode,
+      });
+      const payoutAmount = isDisbursed ? disbursedAbs : remainingAbs;
+
+      return {
+        category: 'refund-voucher',
+        documentTitle: isDisbursed ? 'OFFICIAL REFUND VOUCHER' : 'REFUND SETTLEMENT ADVICE',
+        documentSubtitle: `${lineItem.title} — Cancellation Disbursement Record`,
+        invoiceNumber: docNum,
+        issueDate: formattedIssueDate,
+        dueDate: selected.dueDate ? formatInvoiceDate(selected.dueDate) : null,
+        statusLabel: isFullRefund
+          ? 'REFUND DISBURSED'
+          : isDisbursed
+            ? 'PARTIALLY REFUNDED'
+            : 'REFUND PENDING',
+        statusTone: isFullRefund ? 'paid' : isDisbursed ? 'partial' : 'credit',
+        watermarkText: 'CANCELLED',
+        ...(verificationCode ? { verificationCode } : {}),
+        bookingRef: ref,
+        qrPayload: qr,
+        company: COMPANY_INFO,
+        billedTo,
+        propertySummary,
+        items: [lineItem],
+        financialSummary: {
+          totalAgreedPrice: totalPrice,
+          totalBilledInDoc: settlement.netRefundable,
+          totalPaidInDoc: disbursedAbs,
+          documentNetAmount: payoutAmount,
+          overallTotalPaid: settlement.grossCollected,
+          overallBalanceDue: 0,
+          overallWaivedAmount: overallWaived,
+          completionPercentage: completionPct,
+        },
+        cancellationSummary,
+        amountInWordsLabel: isDisbursed
+          ? 'Refund Disbursed in Words'
+          : 'Net Refundable Amount in Words',
+        amountInWordsValue: numberToBDTWords(payoutAmount),
+        remarks: [
+          ...baseRemarks,
+          isDisbursed
+            ? `Payout Mode: ${lineItem.paymentMode || 'Confirmed'} | Disbursement Date: ${formatInvoiceDate(selected.paidDate || issueDate.toISOString())}${lineItem.reference !== '—' ? ` | Payout Ref: ${lineItem.reference}` : ''}.`
+            : `Net refundable sum of ${formatInvoiceMoney(remainingAbs)} scheduled for disbursement after deduction of ${formatInvoiceMoney(settlement.cancellationFee)} cancellation fee.`,
+          !isFullRefund && isDisbursed
+            ? `Remaining refund balance pending disbursement: ${formatInvoiceMoney(remainingAbs)}.`
+            : 'Full refund obligation is satisfied upon clearance of the instrument referenced above.',
+        ],
+        paymentInstructions: [
+          `Refunds are remitted strictly to the original allottee via Account Payee Cheque, Pay Order, or BEFTN/RTGS transfer.`,
+          `Please retain this Refund Voucher alongside historical receipts for banking and tax reconciliation.`,
+        ],
+      };
+    }
+
     if (effectiveCategory === 'credit-note' || category === 'credit-note') {
       const isWaived = selected.status === 'Waived';
-      const creditVal = isWaived ? Math.abs(selected.scheduledAmount) : Math.abs(selected.scheduledAmount);
-      const docNum = `VN-CN-${ref}-${seqCode}`;
-      const qr = `${COMPANY_INFO.websiteUrl} | ${docNum} | ${ref} | ${billedTo.name} | ${formatInvoiceMoney(creditVal)}`;
+      const creditVal = Math.abs(selected.scheduledAmount);
+      const docNum = `VN-CN-${docRef}-${seqCode}`;
+      const qr = buildDocumentVerificationUrl({
+        origin: verificationOrigin,
+        bookingRef: ref,
+        invoiceNumber: docNum,
+        verificationCode,
+      });
       return {
         category: 'credit-note',
         documentTitle: isWaived ? 'WAIVER & ADJUSTMENT MEMO' : 'OFFICIAL CREDIT NOTE',
@@ -387,6 +746,8 @@ export function buildInvoiceDocument({
         dueDate: null,
         statusLabel: isWaived ? 'WAIVED' : 'CREDITED',
         statusTone: 'credit',
+        watermarkText: isCancelled ? 'CANCELLED' : undefined,
+        ...(verificationCode ? { verificationCode } : {}),
         bookingRef: ref,
         qrPayload: qr,
         company: COMPANY_INFO,
@@ -418,17 +779,27 @@ export function buildInvoiceDocument({
     if (effectiveCategory === 'payment-receipt' || (category === 'payment-receipt' && Number(selected.receivedAmount) > 0)) {
       const receivedVal = Number(selected.receivedAmount) || 0;
       const isFull = selected.status === 'Paid';
-      const docNum = `VN-REC-${ref}-${seqCode}`;
-      const qr = `${COMPANY_INFO.websiteUrl} | ${docNum} | ${ref} | ${billedTo.name} | Paid ${formatInvoiceMoney(receivedVal)}`;
+      const isClosedPartial = selected.status === 'Partially Paid (Closed)' || (isCancelled && !isFull);
+      const docNum = `VN-REC-${docRef}-${seqCode}`;
+      const qr = buildDocumentVerificationUrl({
+        origin: verificationOrigin,
+        bookingRef: ref,
+        invoiceNumber: docNum,
+        verificationCode,
+      });
       return {
         category: 'payment-receipt',
         documentTitle: isFull ? 'OFFICIAL PAYMENT RECEIPT' : 'PARTIAL PAYMENT RECEIPT',
-        documentSubtitle: `${lineItem.title} Settlement Acknowledgment`,
+        documentSubtitle: isCancelled
+          ? `${lineItem.title} Historical Receipt (Booking Cancelled)`
+          : `${lineItem.title} Settlement Acknowledgment`,
         invoiceNumber: docNum,
         issueDate: formattedIssueDate,
         dueDate: selected.dueDate ? formatInvoiceDate(selected.dueDate) : null,
-        statusLabel: isFull ? 'PAID IN FULL' : 'PARTIALLY PAID',
+        statusLabel: isFull ? 'PAID IN FULL' : isClosedPartial ? 'PARTIAL · CLOSED' : 'PARTIALLY PAID',
         statusTone: isFull ? 'paid' : 'partial',
+        watermarkText: isCancelled ? 'CANCELLED' : undefined,
+        ...(verificationCode ? { verificationCode } : {}),
         bookingRef: ref,
         qrPayload: qr,
         company: COMPANY_INFO,
@@ -450,19 +821,28 @@ export function buildInvoiceDocument({
         remarks: [
           ...baseRemarks,
           `Payment Mode: ${lineItem.paymentMode || 'Confirmed'} | Settlement Date: ${formatInvoiceDate(selected.paidDate || issueDate.toISOString())}${lineItem.reference !== '—' ? ` | Transaction Ref: ${lineItem.reference}` : ''}.`,
-          isFull
-            ? `${lineItem.title} has been settled in full and credited toward booking ${ref}.`
-            : `Remaining balance on ${lineItem.title}: ${formatInvoiceMoney(Math.max(0, selected.scheduledAmount - receivedVal))}.`,
+          isCancelled
+            ? `Historical receipt preserved for tax and banking audit — Booking ${ref} was subsequently cancelled; refer to the Cancellation & Final Settlement Statement for refund accounting.`
+            : isFull
+              ? `${lineItem.title} has been settled in full and credited toward booking ${ref}.`
+              : `Remaining balance on ${lineItem.title}: ${formatInvoiceMoney(Math.max(0, selected.scheduledAmount - receivedVal))}.`,
         ],
         paymentInstructions: defaultInstructions,
       };
     }
 
     // Demand / Tax Invoice for unpaid or partial scheduled item
-    const payableNow = Math.max(0, (Number(selected.scheduledAmount) || 0) - (Number(selected.receivedAmount) || 0));
-    const docNum = `VN-INV-${ref}-${seqCode}`;
-    const overdue = isPaymentOverdue(selected, issueDate);
-    const qr = `${COMPANY_INFO.websiteUrl} | ${docNum} | ${ref} | ${billedTo.name} | Due ${formatInvoiceMoney(payableNow)}`;
+    const payableNow = isCancelled
+      ? 0
+      : Math.max(0, (Number(selected.scheduledAmount) || 0) - (Number(selected.receivedAmount) || 0));
+    const docNum = `VN-INV-${docRef}-${seqCode}`;
+    const overdue = isPaymentOverdue(selected, issueDate, booking.status);
+    const qr = buildDocumentVerificationUrl({
+      origin: verificationOrigin,
+      bookingRef: ref,
+      invoiceNumber: docNum,
+      verificationCode,
+    });
     return {
       category: 'demand-invoice',
       documentTitle: isParkingAddon ? 'PARKING ADD-ON INVOICE' : 'PAYMENT DEMAND INVOICE',
@@ -470,8 +850,22 @@ export function buildInvoiceDocument({
       invoiceNumber: docNum,
       issueDate: formattedIssueDate,
       dueDate: formatInvoiceDate(selected.dueDate || selected.scheduledDate),
-      statusLabel: overdue ? 'OVERDUE' : selected.status === 'Partially Paid' ? 'PARTIAL DUE' : 'PAYMENT DUE',
-      statusTone: overdue ? 'overdue' : selected.status === 'Partially Paid' ? 'partial' : 'due',
+      statusLabel: isCancelled
+        ? 'VOIDED'
+        : overdue
+          ? 'OVERDUE'
+          : selected.status === 'Partially Paid'
+            ? 'PARTIAL DUE'
+            : 'PAYMENT DUE',
+      statusTone: isCancelled
+        ? 'cancelled'
+        : overdue
+          ? 'overdue'
+          : selected.status === 'Partially Paid'
+            ? 'partial'
+            : 'due',
+      watermarkText: isCancelled ? 'VOIDED' : undefined,
+      ...(verificationCode ? { verificationCode } : {}),
       bookingRef: ref,
       qrPayload: qr,
       company: COMPANY_INFO,
@@ -503,20 +897,33 @@ export function buildInvoiceDocument({
   if (category === 'outstanding-bundle') {
     const unpaidRows = payments
       .filter((p) => {
-        if (p.status === 'Paid' || p.status === 'Waived') return false;
+        if (isRefundPaymentRow(p) || isCancellationFeeRow(p)) return false;
+        if (
+          p.status === 'Paid' ||
+          p.status === 'Waived' ||
+          p.status === 'Voided' ||
+          p.status === 'Partially Paid (Closed)'
+        ) {
+          return false;
+        }
         const sched = Number(p.scheduledAmount) || 0;
         const rec = Number(p.receivedAmount) || 0;
         return sched > 0 && sched - rec > 0;
       })
-      .map((p, idx) => buildLineItem(p, idx + 1, issueDate, audience));
+      .map((p, idx) => buildLineItem(p, idx + 1, issueDate, audience, booking.status));
 
     const totalScheduled = unpaidRows.reduce((acc, r) => acc + r.scheduledAmount, 0);
     const totalAlreadyReceivedOnRows = unpaidRows.reduce((acc, r) => acc + r.receivedAmount, 0);
-    const netDue = unpaidRows.reduce((acc, r) => acc + r.netPayableOrCredit, 0);
-    const hasOverdue = unpaidRows.some((r) => r.isOverdue);
+    const netDue = isCancelled ? 0 : unpaidRows.reduce((acc, r) => acc + r.netPayableOrCredit, 0);
+    const hasOverdue = !isCancelled && unpaidRows.some((r) => r.isOverdue);
     const nextDueRow = unpaidRows[0];
-    const docNum = `VN-DUE-${ref}`;
-    const qr = `${COMPANY_INFO.websiteUrl} | ${docNum} | ${ref} | ${billedTo.name} | Total Due ${formatInvoiceMoney(netDue)}`;
+    const docNum = `VN-DUE-${docRef}`;
+    const qr = buildDocumentVerificationUrl({
+      origin: verificationOrigin,
+      bookingRef: ref,
+      invoiceNumber: docNum,
+      verificationCode,
+    });
 
     return {
       category: 'outstanding-bundle',
@@ -525,22 +932,22 @@ export function buildInvoiceDocument({
       invoiceNumber: docNum,
       issueDate: formattedIssueDate,
       dueDate: nextDueRow?.dueDate ? formatInvoiceDate(nextDueRow.dueDate) : null,
-      statusLabel:
-        booking.status === 'Cancelled'
-          ? 'CANCELLED'
-          : unpaidRows.length === 0
-            ? 'SETTLED'
-            : hasOverdue
-              ? 'INCLUDES OVERDUE'
-              : 'BALANCE DUE',
-      statusTone:
-        booking.status === 'Cancelled'
-          ? 'cancelled'
-          : unpaidRows.length === 0
-            ? 'paid'
-            : hasOverdue
-              ? 'overdue'
-              : 'due',
+      statusLabel: isCancelled
+        ? 'CANCELLED'
+        : unpaidRows.length === 0
+          ? 'SETTLED'
+          : hasOverdue
+            ? 'INCLUDES OVERDUE'
+            : 'BALANCE DUE',
+      statusTone: isCancelled
+        ? 'cancelled'
+        : unpaidRows.length === 0
+          ? 'paid'
+          : hasOverdue
+            ? 'overdue'
+            : 'due',
+      watermarkText: isCancelled ? 'CANCELLED' : undefined,
+      ...(verificationCode ? { verificationCode } : {}),
       bookingRef: ref,
       qrPayload: qr,
       company: COMPANY_INFO,
@@ -572,23 +979,36 @@ export function buildInvoiceDocument({
   // Consolidated Receipts Summary
   if (category === 'receipts-summary') {
     const paidRows = payments
-      .filter((p) => Number(p.receivedAmount) > 0 && Number(p.scheduledAmount) >= 0)
-      .map((p, idx) => buildLineItem(p, idx + 1, issueDate, audience));
+      .filter((p) => isPositiveClientPaymentRow(p))
+      .map((p, idx) => buildLineItem(p, idx + 1, issueDate, audience, booking.status));
 
     const sumScheduled = paidRows.reduce((acc, r) => acc + r.scheduledAmount, 0);
     const sumReceived = paidRows.reduce((acc, r) => acc + r.receivedAmount, 0);
-    const docNum = `VN-REC-SUM-${ref}`;
-    const qr = `${COMPANY_INFO.websiteUrl} | ${docNum} | ${ref} | ${billedTo.name} | Total Received ${formatInvoiceMoney(sumReceived || totalPaid)}`;
+    const docNum = `VN-REC-SUM-${docRef}`;
+    const qr = buildDocumentVerificationUrl({
+      origin: verificationOrigin,
+      bookingRef: ref,
+      invoiceNumber: docNum,
+      verificationCode,
+    });
 
     return {
       category: 'receipts-summary',
       documentTitle: 'CONSOLIDATED RECEIPT SUMMARY',
-      documentSubtitle: 'Official Acknowledgment of Realized Client Payments',
+      documentSubtitle: isCancelled
+        ? 'Historical Acknowledgment of Realized Client Payments (Booking Cancelled)'
+        : 'Official Acknowledgment of Realized Client Payments',
       invoiceNumber: docNum,
       issueDate: formattedIssueDate,
       dueDate: null,
-      statusLabel: balanceDue === 0 ? 'FULLY SETTLED' : `${completionPct}% REALIZED`,
-      statusTone: balanceDue === 0 ? 'paid' : 'partial',
+      statusLabel: isCancelled
+        ? 'CANCELLED · HISTORICAL RECEIPTS'
+        : balanceDue === 0
+          ? 'FULLY SETTLED'
+          : `${completionPct}% REALIZED`,
+      statusTone: isCancelled ? 'cancelled' : balanceDue === 0 ? 'paid' : 'partial',
+      watermarkText: isCancelled ? 'CANCELLED' : undefined,
+      ...(verificationCode ? { verificationCode } : {}),
       bookingRef: ref,
       qrPayload: qr,
       company: COMPANY_INFO,
@@ -618,16 +1038,24 @@ export function buildInvoiceDocument({
   }
 
   // Comprehensive Account Statement OR Master Booking & Allotment Invoice
-  const allItems = payments.map((p, idx) => buildLineItem(p, idx + 1, issueDate, audience));
+  const allItems = payments.map((p, idx) => buildLineItem(p, idx + 1, issueDate, audience, booking.status));
   const isStatement = category === 'account-statement';
-  const docNum = isStatement ? `VN-STM-${ref}` : `VN-INV-${ref}-MASTER`;
-  const qr = `${COMPANY_INFO.websiteUrl} | ${docNum} | ${ref} | ${billedTo.name} | Total ${formatInvoiceMoney(totalPrice)} | Bal ${formatInvoiceMoney(balanceDue)}`;
+  const docNum = isStatement ? `VN-STM-${docRef}` : `VN-INV-${docRef}-MASTER`;
+  const qr = buildDocumentVerificationUrl({
+    origin: verificationOrigin,
+    bookingRef: ref,
+    invoiceNumber: docNum,
+    verificationCode,
+  });
 
   let statusLabel = 'ACTIVE BOOKING';
   let statusTone: InvoiceDocument['statusTone'] = 'neutral';
-  if (booking.status === 'Cancelled') {
+  if (isCancelled) {
     statusLabel = 'CANCELLED';
     statusTone = 'cancelled';
+  } else if (booking.status === 'On Hold') {
+    statusLabel = 'ON HOLD';
+    statusTone = 'partial';
   } else if (balanceDue === 0 && totalPrice > 0) {
     statusLabel = 'FULLY PAID';
     statusTone = 'paid';
@@ -652,7 +1080,7 @@ export function buildInvoiceDocument({
             paidDate: totalPaid > 0 ? booking.updatedAt || null : null,
             paymentMode: '—',
             reference: '—',
-            status: balanceDue === 0 ? 'Paid' : 'Scheduled',
+            status: isCancelled ? 'Closed' : balanceDue === 0 ? 'Paid' : 'Scheduled',
             scheduledAmount: totalPrice,
             receivedAmount: totalPaid,
             netPayableOrCredit: balanceDue,
@@ -662,12 +1090,15 @@ export function buildInvoiceDocument({
   return {
     category: isStatement ? 'account-statement' : 'booking-summary',
     documentTitle: isStatement ? 'STATEMENT OF ACCOUNT' : 'BOOKING ALLOTMENT INVOICE',
-    documentSubtitle: isStatement
-      ? 'Full Financial Ledger, Installments & Settlement Record'
-      : 'Master Contract Valuation, Down Payment & Installment Schedule',
+    documentSubtitle: isCancelled && isStatement
+      ? 'Closed Contract Financial Record, Voided Schedule & Refund Ledger'
+      : isStatement
+        ? 'Full Financial Ledger, Installments & Settlement Record'
+        : 'Master Contract Valuation, Down Payment & Installment Schedule',
     invoiceNumber: docNum,
     issueDate: formattedIssueDate,
     dueDate:
+      !isCancelled &&
       allItems.find((item) => item.status === 'Scheduled' || item.status === 'Overdue' || item.status === 'Partially Paid')
         ?.dueDate
         ? formatInvoiceDate(
@@ -679,6 +1110,8 @@ export function buildInvoiceDocument({
         : null,
     statusLabel,
     statusTone,
+    watermarkText: isCancelled ? 'CANCELLED' : undefined,
+    ...(verificationCode ? { verificationCode } : {}),
     bookingRef: ref,
     qrPayload: qr,
     company: COMPANY_INFO,
@@ -695,6 +1128,7 @@ export function buildInvoiceDocument({
       overallWaivedAmount: overallWaived,
       completionPercentage: completionPct,
     },
+    ...(isCancelled && isStatement && settlement.grossCollected > 0 ? { cancellationSummary } : {}),
     amountInWordsLabel: isStatement ? 'Net Balance Due in Words' : 'Total Contract Value in Words',
     amountInWordsValue: numberToBDTWords(isStatement ? balanceDue : totalPrice),
     remarks: [

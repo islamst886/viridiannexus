@@ -13,6 +13,7 @@ import Location from './pages/Location';
 import NRB from './pages/NRB';
 import Project from './pages/Project';
 import Projects from './pages/Projects';
+import VerifyDocument from './pages/VerifyDocument';
 
 // Premium Features
 import LiveCameras from './pages/LiveCameras';
@@ -74,6 +75,7 @@ const router = createBrowserRouter([
           { path: 'legal', element: <Legal /> },
           { path: 'nrb', element: <NRB /> },
           { path: 'contact', element: <Contact /> },
+          { path: 'verify', element: <VerifyDocument /> },
           { path: 'journal/:slug', element: <JournalArticle /> },
           { path: 'journal', element: <JournalArticle /> },
 

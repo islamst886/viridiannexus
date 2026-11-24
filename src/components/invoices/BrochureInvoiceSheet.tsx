@@ -17,13 +17,22 @@ interface BrochureInvoiceSheetProps {
 const STATUS_PILL_CLASSES: Record<string, string> = {
   Paid: 'vn-tone-paid',
   'Partially Paid': 'vn-tone-partial',
+  'Partial (Closed)': 'vn-tone-partial',
   Overdue: 'vn-tone-overdue',
   Waived: 'vn-tone-neutral',
   Scheduled: 'vn-tone-due',
+  Voided: 'vn-tone-voided',
+  Deducted: 'vn-tone-cancelled',
+  Closed: 'vn-tone-neutral',
+  'Refund Pending': 'vn-tone-partial',
+  'Partially Refunded': 'vn-tone-refund',
+  Refunded: 'vn-tone-paid',
 };
 
 function getLineStatusClass(item: InvoiceLineItem): string {
+  if (item.isVoided) return 'vn-tone-voided';
   if (item.isCredit) return 'vn-tone-credit';
+  if (item.isFee) return 'vn-tone-cancelled';
   return STATUS_PILL_CLASSES[item.status] || 'vn-tone-neutral';
 }
 
@@ -34,6 +43,18 @@ function getSummaryTotalLabel(doc: InvoiceDocument): string {
       return 'Total Amount Acknowledged';
     case 'credit-note':
       return 'Net Amount Credited / Adjusted';
+    case 'cancellation-settlement':
+      if (doc.cancellationSummary && doc.cancellationSummary.refundRemaining > 0) {
+        return 'Net Refund Remaining';
+      }
+      if (doc.cancellationSummary && doc.cancellationSummary.refundDisbursed > 0) {
+        return 'Total Refund Disbursed';
+      }
+      return 'Net Closing Balance';
+    case 'refund-voucher':
+      return doc.financialSummary.totalPaidInDoc > 0
+        ? 'Refund Disbursed in Voucher'
+        : 'Net Refund Payable';
     case 'demand-invoice':
     case 'outstanding-bundle':
       return 'Net Amount Payable Now';
@@ -51,6 +72,8 @@ function getSummaryTotalAmount(doc: InvoiceDocument): number {
     case 'receipts-summary':
       return doc.financialSummary.totalPaidInDoc;
     case 'credit-note':
+    case 'cancellation-settlement':
+    case 'refund-voucher':
       return doc.financialSummary.documentNetAmount;
     case 'demand-invoice':
     case 'outstanding-bundle':
@@ -86,6 +109,11 @@ export default function BrochureInvoiceSheet({
             aria-label={`${doc.documentTitle} page ${pageIndex + 1} of ${totalPages}`}
           >
             {bgSrc && <img src={bgSrc} alt="" aria-hidden="true" className="vn-inv-bg-img" />}
+            {doc.watermarkText && (
+              <div className="vn-inv-watermark" aria-hidden="true">
+                {doc.watermarkText}
+              </div>
+            )}
             <div className="vn-inv-body">
               {isFirstPage ? (
                 <>
@@ -174,6 +202,11 @@ export default function BrochureInvoiceSheet({
                             Due Date: <strong>{doc.dueDate}</strong>
                           </div>
                         )}
+                        {doc.verificationCode && (
+                          <div>
+                            Verify Code: <strong>{doc.verificationCode}</strong>
+                          </div>
+                        )}
                       </div>
 
                       {qrSrc && (
@@ -213,7 +246,11 @@ export default function BrochureInvoiceSheet({
                     </div>
 
                     <div className="vn-inv-party-card vn-party-accent">
-                      <div className="vn-inv-party-heading">Property &amp; Unit Allocation</div>
+                      <div className="vn-inv-party-heading">
+                        {doc.propertySummary.bookingStatus === 'Cancelled'
+                          ? 'Property & Unit Allocation (Released)'
+                          : 'Property & Unit Allocation'}
+                      </div>
                       <div className="vn-inv-party-name">{doc.propertySummary.propertyName}</div>
                       <div className="vn-inv-party-row">
                         <span className="vn-inv-party-key">Location:</span>
@@ -334,13 +371,19 @@ export default function BrochureInvoiceSheet({
                         </tr>
                       ) : (
                         pageItems.map((item) => {
-                          const netLabel = item.isCredit
-                            ? `${formatInvoiceMoney(item.netPayableOrCredit, false)} Cr.`
-                            : item.isWaived
-                              ? '৳ 0'
-                              : item.status === 'Paid'
-                                ? '৳ 0'
-                                : formatInvoiceMoney(item.netPayableOrCredit);
+                          const netLabel = item.isVoided
+                            ? 'Voided'
+                            : item.isFee
+                              ? formatInvoiceMoney(item.scheduledAmount)
+                              : item.isRefund
+                                ? item.netPayableOrCredit > 0
+                                  ? formatInvoiceMoney(item.netPayableOrCredit)
+                                  : 'Settled'
+                                : item.isCredit
+                                  ? `${formatInvoiceMoney(item.netPayableOrCredit, false)} Cr.`
+                                  : item.isWaived || item.status === 'Paid' || item.status === 'Partial (Closed)' || item.status === 'Closed'
+                                    ? '৳ 0'
+                                    : formatInvoiceMoney(item.netPayableOrCredit);
 
                           return (
                             <tr key={item.id}>
@@ -427,37 +470,70 @@ export default function BrochureInvoiceSheet({
                     </div>
 
                     <div className="vn-inv-totals-card">
-                      <div className="vn-inv-totals-rows">
-                        <div className="vn-inv-total-line">
-                          <span>Agreed Contract Value</span>
-                          <strong>{formatInvoiceMoney(doc.financialSummary.totalAgreedPrice)}</strong>
-                        </div>
-                        <div className="vn-inv-total-line">
-                          <span>Cumulative Received ({doc.financialSummary.completionPercentage}%)</span>
-                          <strong style={{ color: '#166534' }}>
-                            {formatInvoiceMoney(doc.financialSummary.overallTotalPaid)}
-                          </strong>
-                        </div>
-                        {doc.financialSummary.overallWaivedAmount > 0 && (
+                      {doc.cancellationSummary &&
+                      (doc.category === 'cancellation-settlement' ||
+                        doc.category === 'refund-voucher') ? (
+                        <div className="vn-inv-totals-rows">
                           <div className="vn-inv-total-line">
-                            <span>Total Waived Adjustments</span>
-                            <strong>
-                              {formatInvoiceMoney(doc.financialSummary.overallWaivedAmount)}
+                            <span>Gross Client Payments Collected</span>
+                            <strong style={{ color: '#166534' }}>
+                              {formatInvoiceMoney(doc.cancellationSummary.grossCollected)}
                             </strong>
                           </div>
-                        )}
-                        <div className="vn-inv-total-line">
-                          <span>Overall Contract Balance Due</span>
-                          <strong
-                            style={{
-                              color:
-                                doc.financialSummary.overallBalanceDue > 0 ? '#991b1b' : '#166534',
-                            }}
-                          >
-                            {formatInvoiceMoney(doc.financialSummary.overallBalanceDue)}
-                          </strong>
+                          {doc.cancellationSummary.cancellationFee > 0 && (
+                            <div className="vn-inv-total-line">
+                              <span>Less: Cancellation Fee / Deduction</span>
+                              <strong style={{ color: '#991b1b' }}>
+                                -{formatInvoiceMoney(doc.cancellationSummary.cancellationFee)}
+                              </strong>
+                            </div>
+                          )}
+                          <div className="vn-inv-total-line">
+                            <span>Net Refundable Amount</span>
+                            <strong>
+                              {formatInvoiceMoney(doc.cancellationSummary.netRefundable)}
+                            </strong>
+                          </div>
+                          <div className="vn-inv-total-line">
+                            <span>Refund Disbursed to Date</span>
+                            <strong style={{ color: '#155e75' }}>
+                              {formatInvoiceMoney(doc.cancellationSummary.refundDisbursed)}
+                            </strong>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="vn-inv-totals-rows">
+                          <div className="vn-inv-total-line">
+                            <span>Agreed Contract Value</span>
+                            <strong>{formatInvoiceMoney(doc.financialSummary.totalAgreedPrice)}</strong>
+                          </div>
+                          <div className="vn-inv-total-line">
+                            <span>Cumulative Received ({doc.financialSummary.completionPercentage}%)</span>
+                            <strong style={{ color: '#166534' }}>
+                              {formatInvoiceMoney(doc.financialSummary.overallTotalPaid)}
+                            </strong>
+                          </div>
+                          {doc.financialSummary.overallWaivedAmount > 0 && (
+                            <div className="vn-inv-total-line">
+                              <span>Total Waived Adjustments</span>
+                              <strong>
+                                {formatInvoiceMoney(doc.financialSummary.overallWaivedAmount)}
+                              </strong>
+                            </div>
+                          )}
+                          <div className="vn-inv-total-line">
+                            <span>Overall Contract Balance Due</span>
+                            <strong
+                              style={{
+                                color:
+                                  doc.financialSummary.overallBalanceDue > 0 ? '#991b1b' : '#166534',
+                              }}
+                            >
+                              {formatInvoiceMoney(doc.financialSummary.overallBalanceDue)}
+                            </strong>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="vn-inv-grand-total">
                         <span>{getSummaryTotalLabel(doc)}</span>

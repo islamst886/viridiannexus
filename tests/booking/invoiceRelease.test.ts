@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Booking, BookingPayment } from '../../src/types';
+import { CANCELLATION_FEE_TYPE, REFUND_PAYOUT_TYPE } from '../../src/utils/bookingCancellation';
 import { buildInvoiceDocument } from '../../src/utils/invoiceBuilder';
 import {
+  evaluateDocumentIssuancePolicy,
   getClientAuthorizedBookingCategories,
   getClientAuthorizedPayments,
   getClientTotalAuthorizedDocumentsCount,
@@ -9,7 +11,9 @@ import {
   isPaymentInvoiceAuthorizedForClient,
   mergeInvoiceReleaseManifestIntoNotes,
   parseInvoiceReleaseManifest,
+  persistBookingInvoiceRelease,
   resolveDefaultClientDocumentSelection,
+  revokeActiveDocsOnCancellation,
   stripInvoiceReleaseManifestMarker,
   withBookingDocRelease,
   withPaymentDocRelease,
@@ -32,9 +36,9 @@ function makeBooking(overrides: Record<string, unknown> = {}): Booking {
     unitNumber: 'Unit A',
     parkingSpotIds: [],
     parkingPrice: 0,
-    totalPrice: 6250000,
-    totalPaid: 350000,
-    balanceDue: 5900000,
+    totalPrice: typeof overrides.totalPrice === 'number' ? overrides.totalPrice : 6250000,
+    totalPaid: typeof overrides.totalPaid === 'number' ? overrides.totalPaid : 350000,
+    balanceDue: typeof overrides.balanceDue === 'number' ? overrides.balanceDue : 5900000,
     downPaymentAmount: 350000,
     stage: 'Down Payment Paid',
     status: String(mock.status || 'Active'),
@@ -190,5 +194,176 @@ describe('Client Portal Invoice Issuance & Verification Governance', () => {
     });
     expect(clientReceipt.items[0]?.reference).toBe('EBL-7712');
     expect(clientReceipt.items[0]?.subtitle).toBeUndefined();
+  });
+
+  it('enforces evaluateDocumentIssuancePolicy across Cancelled (৳0 and >৳0), On Hold, Fully Paid, and Voided/Refund states', async () => {
+    const payments = makePayments();
+
+    // Active with zero paid blocks receipts-summary
+    const activeZero = makeBooking({ status: 'Active', totalPaid: 0, balanceDue: 6250000 });
+    expect(
+      evaluateDocumentIssuancePolicy(activeZero, { kind: 'booking-doc', category: 'receipts-summary' }, [])
+        .canIssue
+    ).toBe(false);
+    expect(
+      evaluateDocumentIssuancePolicy(
+        activeZero,
+        { kind: 'booking-doc', category: 'cancellation-settlement' },
+        []
+      ).canPreview
+    ).toBe(false);
+
+    // Fully Paid disables issuing outstanding-bundle
+    const fullyPaid = makeBooking({ status: 'Active', totalPaid: 6250000, balanceDue: 0 });
+    expect(
+      evaluateDocumentIssuancePolicy(
+        fullyPaid,
+        { kind: 'booking-doc', category: 'outstanding-bundle' },
+        payments
+      ).canIssue
+    ).toBe(false);
+
+    // On Hold pauses allotment, outstanding, and unpaid demand invoice issuance while keeping receipts & statements open
+    const onHold = makeBooking({ status: 'On Hold' });
+    expect(
+      evaluateDocumentIssuancePolicy(onHold, { kind: 'booking-doc', category: 'booking-summary' }, payments)
+        .canIssue
+    ).toBe(false);
+    expect(
+      evaluateDocumentIssuancePolicy(
+        onHold,
+        { kind: 'booking-doc', category: 'outstanding-bundle' },
+        payments
+      ).canIssue
+    ).toBe(false);
+    expect(
+      evaluateDocumentIssuancePolicy(onHold, { kind: 'payment-doc', payment: payments[1]! }, payments)
+        .canIssue
+    ).toBe(false);
+    expect(
+      evaluateDocumentIssuancePolicy(onHold, { kind: 'payment-doc', payment: payments[0]! }, payments)
+        .canIssue
+    ).toBe(true);
+    expect(
+      evaluateDocumentIssuancePolicy(
+        onHold,
+        { kind: 'booking-doc', category: 'account-statement' },
+        payments
+      ).canIssue
+    ).toBe(true);
+
+    // Cancelled with ৳0 paid blocks booking-summary, outstanding-bundle, receipts-summary, and unpaid demands
+    const cancelledZero = makeBooking({ status: 'Cancelled', totalPaid: 0, balanceDue: 0 });
+    expect(
+      evaluateDocumentIssuancePolicy(
+        cancelledZero,
+        { kind: 'booking-doc', category: 'booking-summary' },
+        []
+      )
+    ).toMatchObject({ canPreview: false, canIssue: false, allowedForClient: false });
+    expect(
+      evaluateDocumentIssuancePolicy(
+        cancelledZero,
+        { kind: 'booking-doc', category: 'receipts-summary' },
+        []
+      )
+    ).toMatchObject({ canPreview: false, canIssue: false, allowedForClient: false });
+    expect(
+      evaluateDocumentIssuancePolicy(
+        cancelledZero,
+        { kind: 'booking-doc', category: 'cancellation-settlement' },
+        []
+      )
+    ).toMatchObject({ canPreview: true, canIssue: true, allowedForClient: true });
+
+    // Voided and Cancellation Fee rows cannot be previewed or issued directly; pending refund cannot be issued until disbursed
+    const voidedRow: BookingPayment = { ...payments[1]!, status: 'Voided' };
+    const feeRow: BookingPayment = {
+      id: 'fee-1',
+      bookingId: 'bkg-rel-01',
+      type: CANCELLATION_FEE_TYPE,
+      scheduledAmount: 25000,
+      receivedAmount: 0,
+      status: 'Deducted',
+      paymentMode: 'Deduction',
+      notes: '',
+    };
+    const pendingRefundRow: BookingPayment = {
+      id: 'rfn-pending',
+      bookingId: 'bkg-rel-01',
+      type: REFUND_PAYOUT_TYPE,
+      scheduledAmount: -325000,
+      receivedAmount: 0,
+      status: 'Refund Pending',
+      paymentMode: 'Bank Transfer',
+      notes: '',
+    };
+    const disbursedRefundRow: BookingPayment = {
+      ...pendingRefundRow,
+      id: 'rfn-done',
+      receivedAmount: -325000,
+      status: 'Refunded',
+    };
+
+    const cancelledWithPaid = makeBooking({ status: 'Cancelled', totalPaid: 350000, balanceDue: 0 });
+    expect(
+      evaluateDocumentIssuancePolicy(
+        cancelledWithPaid,
+        { kind: 'payment-doc', payment: voidedRow },
+        payments
+      ).canPreview
+    ).toBe(false);
+    expect(
+      evaluateDocumentIssuancePolicy(
+        cancelledWithPaid,
+        { kind: 'payment-doc', payment: feeRow },
+        payments
+      ).canPreview
+    ).toBe(false);
+    expect(
+      evaluateDocumentIssuancePolicy(
+        cancelledWithPaid,
+        { kind: 'payment-doc', payment: pendingRefundRow },
+        payments
+      )
+    ).toMatchObject({ canPreview: true, canIssue: false, allowedForClient: false });
+    expect(
+      evaluateDocumentIssuancePolicy(
+        cancelledWithPaid,
+        { kind: 'payment-doc', payment: disbursedRefundRow },
+        payments
+      )
+    ).toMatchObject({ canPreview: true, canIssue: true, allowedForClient: true });
+
+    await expect(
+      persistBookingInvoiceRelease({
+        booking: cancelledZero,
+        target: { kind: 'booking-doc', category: 'booking-summary' },
+        nextStatus: 'issued',
+        actorName: 'Admin',
+        payments: [],
+      })
+    ).rejects.toThrow('Allotment invoices cannot be issued on cancelled bookings.');
+  });
+
+  it('revokeActiveDocsOnCancellation withdraws allotment, outstanding, and unpaid demand invoices while preserving statements and paid receipts', () => {
+    const payments = makePayments();
+    let manifest = parseInvoiceReleaseManifest(makeBooking());
+    manifest = withBookingDocRelease(manifest, 'booking-summary', 'issued', { name: 'Admin' });
+    manifest = withBookingDocRelease(manifest, 'outstanding-bundle', 'issued', { name: 'Admin' });
+    manifest = withBookingDocRelease(manifest, 'account-statement', 'issued', { name: 'Admin' });
+    manifest = withPaymentDocRelease(manifest, payments[0]!, 'issued', { name: 'Admin' });
+    manifest = withPaymentDocRelease(manifest, payments[1]!, 'issued', { name: 'Admin' });
+
+    const revoked = revokeActiveDocsOnCancellation(manifest, payments, {
+      name: 'Super Admin',
+      id: 'sa-1',
+    });
+
+    expect(revoked.bookingDocs['booking-summary']?.status).toBe('withheld');
+    expect(revoked.bookingDocs['outstanding-bundle']?.status).toBe('withheld');
+    expect(revoked.bookingDocs['account-statement']?.status).toBe('issued');
+    expect(revoked.paymentDocs[payments[0]!.id]?.status).toBe('issued');
+    expect(revoked.paymentDocs[payments[1]!.id]?.status).toBe('withheld');
   });
 });

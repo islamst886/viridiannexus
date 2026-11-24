@@ -599,9 +599,15 @@ export default function AdminBookings() {
                               </td>
                               <td className="p-4">
                                 <span
-                                  className={`font-semibold ${b.balanceDue > 0 ? 'text-brand-dark' : 'text-green-600'}`}
+                                  className={`font-semibold ${
+                                    b.status === 'Cancelled'
+                                      ? 'text-gray-400'
+                                      : b.balanceDue > 0
+                                        ? 'text-brand-dark'
+                                        : 'text-green-600'
+                                  }`}
                                 >
-                                  {formatMoney(b.balanceDue)}
+                                  {b.status === 'Cancelled' ? '৳ 0' : formatMoney(b.balanceDue)}
                                 </span>
                               </td>
                               <td className="p-4 text-right">
@@ -660,6 +666,11 @@ export default function AdminBookings() {
         onClose={() => setInvoiceBundle(null)}
         booking={invoiceBundle?.booking ?? null}
         payments={invoiceBundle?.payments ?? []}
+        initialCategory={
+          invoiceBundle?.booking.status === 'Cancelled'
+            ? 'cancellation-settlement'
+            : 'booking-summary'
+        }
         audience="admin"
         actorName={userProfile?.displayName || 'Admin'}
         actorId={userProfile?.uid ?? null}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Booking, BookingPayment } from '../../src/types';
+import { CANCELLATION_FEE_TYPE, REFUND_PAYOUT_TYPE } from '../../src/utils/bookingCancellation';
+import { normalizeInvoiceRefCode } from '../../src/utils/documentVerification';
 import {
   buildInvoiceDocument,
   classifyPaymentDocumentCategory,
@@ -135,7 +137,7 @@ describe('Booking Management Invoice Builder', () => {
     });
 
     expect(doc.documentTitle).toBe('BOOKING ALLOTMENT INVOICE');
-    expect(doc.invoiceNumber).toBe(`VN-INV-${booking.bookingRef}-MASTER`);
+    expect(doc.invoiceNumber).toBe(`VN-INV-${normalizeInvoiceRefCode(booking.bookingRef)}-MASTER`);
     expect(doc.company.legalName).toBe('Viridian Nexus Development Ltd.');
     expect(doc.company.enlistments.rajuk).toBe('RAJUK Enlisted');
     expect(doc.company.enlistments.canttBoard).toBe('Cantt. Board Enlisted');
@@ -359,5 +361,156 @@ describe('Booking Management Invoice Builder', () => {
 
     expect(sanitizeInvoiceFilename(`VN/INV ${booking.bookingRef} *?`)).toBe(`VN-INV-${booking.bookingRef}`);
     expect(escapeHtml('<script>"alert"</script>')).toBe('&lt;script&gt;&quot;alert&quot;&lt;/script&gt;');
+  });
+
+  it('builds Cancellation Settlement, Refund Voucher, and watermarked historical statements for cancelled bookings', () => {
+    const cancelledZero = toBooking({
+      status: 'Cancelled',
+      stage: 'Cancelled',
+      unitNumber: 'Floor 3, A',
+      parkingIncluded: 'P-3 (Ground)',
+      totalPaid: 0,
+      balanceDue: 12000000,
+    });
+    const zeroUnpaid: BookingPayment[] = [
+      {
+        id: 'pay-void-1',
+        bookingId: cancelledZero.id,
+        type: 'Installment',
+        installmentNumber: 1,
+        scheduledAmount: 1700000,
+        receivedAmount: 0,
+        status: 'Voided',
+        dueDate: '2026-01-01',
+        scheduledDate: '2026-01-01',
+        paymentMode: 'Cash',
+        notes: '',
+      },
+    ];
+
+    const zeroSettlementDoc = buildInvoiceDocument({
+      booking: cancelledZero,
+      payments: zeroUnpaid,
+      category: 'cancellation-settlement',
+      issueDate: refDate,
+    });
+    expect(zeroSettlementDoc.documentTitle).toBe('CANCELLATION & FINAL SETTLEMENT');
+    expect(zeroSettlementDoc.watermarkText).toBe('CANCELLED');
+    expect(zeroSettlementDoc.statusLabel).toBe('CANCELLED · CLOSED');
+    expect(zeroSettlementDoc.propertySummary.unitNumber).toContain('(Released)');
+    expect(zeroSettlementDoc.propertySummary.parking).toContain('(Released)');
+    expect(zeroSettlementDoc.financialSummary.overallBalanceDue).toBe(0);
+    expect(zeroSettlementDoc.items[0]?.status).toBe('Closed');
+
+    const cancelledStmt = buildInvoiceDocument({
+      booking: cancelledZero,
+      payments: zeroUnpaid,
+      category: 'account-statement',
+      issueDate: refDate,
+    });
+    expect(cancelledStmt.watermarkText).toBe('CANCELLED');
+    expect(cancelledStmt.statusLabel).toBe('CANCELLED');
+    expect(cancelledStmt.financialSummary.overallBalanceDue).toBe(0);
+    expect(cancelledStmt.items[0]?.status).toBe('Voided');
+    expect(cancelledStmt.items[0]?.isOverdue).toBe(false);
+
+    // Cancelled after Down Payment + Fee + Disbursed Refund
+    const cancelledPaid = toBooking({
+      status: 'Cancelled',
+      stage: 'Cancelled',
+      unitNumber: 'Floor 5, B',
+      parkingIncluded: null,
+      totalPaid: 1000000,
+      balanceDue: 0,
+    });
+    const refundPayments: BookingPayment[] = [
+      {
+        id: 'dp-paid',
+        bookingId: cancelledPaid.id,
+        type: 'Down Payment',
+        scheduledAmount: 1000000,
+        receivedAmount: 1000000,
+        status: 'Paid',
+        dueDate: '2026-01-10',
+        scheduledDate: '2026-01-10',
+        paidDate: '2026-01-10',
+        paymentMode: 'Bank Transfer',
+        notes: 'Ref: TXN-551',
+      },
+      {
+        id: 'fee-cxl',
+        bookingId: cancelledPaid.id,
+        type: CANCELLATION_FEE_TYPE,
+        scheduledAmount: 50000,
+        receivedAmount: 0,
+        status: 'Deducted',
+        dueDate: '2026-02-01',
+        scheduledDate: '2026-02-01',
+        paymentMode: 'Deduction',
+        notes: '',
+      },
+      {
+        id: 'rfn-payout',
+        bookingId: cancelledPaid.id,
+        type: REFUND_PAYOUT_TYPE,
+        scheduledAmount: -950000,
+        receivedAmount: -950000,
+        status: 'Refunded',
+        dueDate: '2026-02-15',
+        scheduledDate: '2026-02-15',
+        paidDate: '2026-02-14',
+        paymentMode: 'Account Payee Cheque',
+        notes: 'Ref: CHQ-77101',
+      },
+    ];
+
+    const paidSettlementDoc = buildInvoiceDocument({
+      booking: cancelledPaid,
+      payments: refundPayments,
+      category: 'cancellation-settlement',
+      issueDate: refDate,
+    });
+    expect(paidSettlementDoc.statusLabel).toBe('REFUND SETTLED');
+    expect(paidSettlementDoc.cancellationSummary).toMatchObject({
+      grossCollected: 1000000,
+      cancellationFee: 50000,
+      netRefundable: 950000,
+      refundDisbursed: 950000,
+      refundRemaining: 0,
+    });
+
+    const voucher = buildInvoiceDocument({
+      booking: cancelledPaid,
+      payments: refundPayments,
+      category: 'refund-voucher',
+      targetPaymentId: 'rfn-payout',
+      issueDate: refDate,
+    });
+    expect(voucher.documentTitle).toBe('OFFICIAL REFUND VOUCHER');
+    expect(voucher.statusLabel).toBe('REFUND DISBURSED');
+    expect(voucher.invoiceNumber).toBe(`VN-RFN-${normalizeInvoiceRefCode(cancelledPaid.bookingRef)}-RFN`);
+    expect(voucher.financialSummary.documentNetAmount).toBe(950000);
+    expect(voucher.items[0]?.reference).toBe('CHQ-77101');
+
+    const cancelledReceiptsSum = buildInvoiceDocument({
+      booking: cancelledPaid,
+      payments: refundPayments,
+      category: 'receipts-summary',
+      issueDate: refDate,
+    });
+    expect(cancelledReceiptsSum.statusLabel).toBe('CANCELLED · HISTORICAL RECEIPTS');
+    expect(cancelledReceiptsSum.items.map((i) => i.id)).toEqual(['dp-paid']);
+
+    const historicalReceipt = buildInvoiceDocument({
+      booking: cancelledPaid,
+      payments: refundPayments,
+      category: 'payment-receipt',
+      targetPaymentId: 'dp-paid',
+      issueDate: refDate,
+    });
+    expect(historicalReceipt.watermarkText).toBe('CANCELLED');
+    expect(historicalReceipt.remarks.some((r) => r.includes('Historical receipt preserved'))).toBe(
+      true
+    );
   });
 });
