@@ -1,8 +1,10 @@
 import { COMPANY_INFO } from '../data/companyInfo.js';
 import type { Booking, BookingPayment } from '../types/index.js';
+import { isCancellationFeeRow, isRefundPaymentRow } from './bookingCancellation.js';
 import {
   buildInvoiceDocument,
   classifyPaymentDocumentCategory,
+  deriveSequenceCode,
   type InvoiceCategory,
   type InvoiceDocument,
 } from './invoiceBuilder.js';
@@ -98,6 +100,7 @@ export interface ResolvedDocumentMatch {
   target: ReleaseToggleTarget;
   doc: InvoiceDocument;
   payment?: BookingPayment;
+  supersededBySettledReceipt?: boolean;
 }
 
 const BOOKING_LEVEL_CATEGORIES: BookingInvoiceDocumentKey[] = [
@@ -155,6 +158,8 @@ export function resolveDocumentTargetFromInvoiceNumber(
     }
   }
 
+  const docRef = normalizeInvoiceRefCode(ref);
+
   for (const payment of payments) {
     const { category } = classifyPaymentDocumentCategory(payment);
     const doc = buildInvoiceDocument({
@@ -172,6 +177,40 @@ export function resolveDocumentTargetFromInvoiceNumber(
         payment,
       };
     }
+  }
+
+  // Fallback: match previously printed Demand Invoices (VN-INV-...) whose underlying row
+  // has since been settled, waived, credit-adjusted, or voided.
+  for (const payment of payments) {
+    if (
+      isRefundPaymentRow(payment) ||
+      isCancellationFeeRow(payment) ||
+      Number(payment.scheduledAmount) < 0
+    ) {
+      continue;
+    }
+
+    const seqCode = deriveSequenceCode(payment, payments);
+    const historicalDemandInvoice = `VN-INV-${docRef}-${seqCode}`;
+    if (!matchesInvoiceNumber(historicalDemandInvoice, targetUpper, ref)) {
+      continue;
+    }
+
+    const { category } = classifyPaymentDocumentCategory(payment);
+    const doc = buildInvoiceDocument({
+      booking,
+      payments,
+      category,
+      targetPaymentId: payment.id,
+      audience: 'client',
+    });
+    return {
+      category,
+      target: { kind: 'payment-doc', payment },
+      doc,
+      payment,
+      supersededBySettledReceipt: category !== 'demand-invoice',
+    };
   }
 
   return null;

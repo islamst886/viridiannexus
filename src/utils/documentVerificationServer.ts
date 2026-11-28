@@ -13,6 +13,7 @@ import {
 } from './documentVerification.js';
 import {
   evaluateDocumentIssuancePolicy,
+  getAcceptedVerificationCodes,
   getDocumentVerificationInfo,
   isBookingDocKey,
   parseInvoiceReleaseManifest,
@@ -380,10 +381,15 @@ export async function handleVerifyDocumentRequest(
       });
     }
 
-    const expectedCode = (verificationInfo.verificationCode || '').trim().toUpperCase();
+    const acceptedCodes = getAcceptedVerificationCodes(
+      booking,
+      match.category,
+      match.payment,
+      payments
+    );
     const providedCode = code.toUpperCase();
     if (providedCode) {
-      if (!SAFE_DOC_TOKEN_RE.test(code) || providedCode !== expectedCode) {
+      if (!SAFE_DOC_TOKEN_RE.test(code) || !acceptedCodes.includes(providedCode)) {
         return jsonVerifyResponse({
           verdict: 'INVALID_CODE',
           headline: 'Verification Code Mismatch',
@@ -407,6 +413,17 @@ export async function handleVerifyDocumentRequest(
         headline: 'Authentic Historical Receipt (Booking Cancelled)',
         message:
           'This payment receipt is authentic and reflects realized funds, though the booking was subsequently cancelled. Please consult the Cancellation & Final Settlement Statement for refund status.',
+        verifiedAt,
+        document: buildSummary(codeMatched, true),
+        ...(adminBookingId ? { adminBookingId } : {}),
+      });
+    }
+
+    if (match.supersededBySettledReceipt) {
+      return jsonVerifyResponse({
+        verdict: 'VERIFIED',
+        headline: 'Official Invoice Verified · Already Settled',
+        message: `This demand invoice is authentic and has since been settled under ${match.doc.documentTitle} (${match.doc.invoiceNumber}).`,
         verifiedAt,
         document: buildSummary(codeMatched, true),
         ...(adminBookingId ? { adminBookingId } : {}),

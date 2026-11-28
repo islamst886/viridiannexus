@@ -175,7 +175,8 @@ function CancelBookingModalContent({
           'cancellation-settlement',
           'issued',
           { name: adminName, id: adminUid ?? null },
-          cancelTime
+          cancelTime,
+          booking.id
         );
       }
       const nextNotes = mergeInvoiceReleaseManifestIntoNotes(booking.notes, nextManifest);

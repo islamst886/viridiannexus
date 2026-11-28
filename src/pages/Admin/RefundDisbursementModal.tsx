@@ -234,7 +234,8 @@ function RefundDisbursementModalContent({
           'cancellation-settlement',
           'issued',
           { name: adminName, id: adminUid ?? null },
-          nowIso
+          nowIso,
+          booking.id
         );
         if (issueVoucherToClient && createdRefundRow && amountNum > 0) {
           currentManifest = withPaymentDocRelease(
@@ -242,7 +243,8 @@ function RefundDisbursementModalContent({
             createdRefundRow,
             'issued',
             { name: adminName, id: adminUid ?? null },
-            nowIso
+            nowIso,
+            booking.id
           );
         }
 
@@ -309,7 +311,8 @@ function RefundDisbursementModalContent({
             updatedRowForManifest,
             'issued',
             { name: adminName, id: adminUid ?? null },
-            nowIso
+            nowIso,
+            booking.id
           );
         }
         const nextNotes = mergeInvoiceReleaseManifestIntoNotes(booking.notes, currentManifest);

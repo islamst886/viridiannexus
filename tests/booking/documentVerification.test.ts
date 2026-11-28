@@ -13,10 +13,13 @@ import {
 } from '../../src/utils/documentVerificationServer';
 import { buildInvoiceDocument } from '../../src/utils/invoiceBuilder';
 import {
+  generateCanonicalBookingDocCode,
+  generateCanonicalPaymentDocCode,
   getDocumentVerificationInfo,
   mergeInvoiceReleaseManifestIntoNotes,
   parseInvoiceReleaseManifest,
   withBookingDocRelease,
+  withPaymentDocRelease,
 } from '../../src/utils/invoiceRelease';
 
 const BASE_ENV: VerifyDocumentEnv = {
@@ -381,5 +384,293 @@ describe('Live Privacy-Safe Document Verification Subsystem', () => {
     );
     const userBody = (await userRes.json()) as DocumentVerificationResponse;
     expect(userBody.adminBookingId).toBeUndefined();
+  });
+
+  it('keeps booking-level verification codes & QR payloads identical across withhold and re-issue by different admins', async () => {
+    const baseManifest = parseInvoiceReleaseManifest(undefined);
+    const issuedFirst = withBookingDocRelease(
+      baseManifest,
+      'account-statement',
+      'issued',
+      { name: 'Admin One', id: 'adm-1' },
+      '2026-11-20T10:00:00.000Z',
+      'bkg-secret-uuid-9991'
+    );
+    const withheld = withBookingDocRelease(
+      issuedFirst,
+      'account-statement',
+      'withheld',
+      { name: 'Admin Two', id: 'adm-2' },
+      '2026-11-21T12:00:00.000Z',
+      'bkg-secret-uuid-9991'
+    );
+    const reissuedLater = withBookingDocRelease(
+      withheld,
+      'account-statement',
+      'issued',
+      { name: 'Super Admin', id: 'sa-1' },
+      '2026-11-28T18:00:00.000Z',
+      'bkg-secret-uuid-9991'
+    );
+
+    const codeFirst = issuedFirst.bookingDocs['account-statement']?.verificationCode;
+    const codeReissued = reissuedLater.bookingDocs['account-statement']?.verificationCode;
+    expect(codeFirst).toBe(generateCanonicalBookingDocCode('bkg-secret-uuid-9991', 'account-statement'));
+    expect(codeReissued).toBe(codeFirst);
+
+    const dbBooking = makeDbBooking({
+      notes: mergeInvoiceReleaseManifestIntoNotes('', reissuedLater),
+    });
+    const res = await handleVerifyDocumentRequest(
+      new Request(
+        `https://viridiannexus.com/api/verifyDocument?ref=VN-2026-8687&doc=VN-STM-2026-8687&code=${codeFirst}`
+      ),
+      BASE_ENV,
+      { fetchFn: createMockFetch({ bookings: [dbBooking], payments: makeDbPayments() }) }
+    );
+    const body = (await res.json()) as DocumentVerificationResponse;
+    expect(body.verdict).toBe('VERIFIED');
+    expect(body.document?.verificationCodeMatched).toBe(true);
+  });
+
+  it('keeps paid receipt QR codes identical when auto-verified receipts are later explicitly issued/toggled', async () => {
+    const dbPayments = makeDbPayments();
+    const dpPayment: BookingPayment = {
+      id: 'pay-dp-1',
+      bookingId: 'bkg-secret-uuid-9991',
+      type: 'Down Payment',
+      scheduledAmount: 100000,
+      receivedAmount: 100000,
+      status: 'Paid',
+      paymentMode: 'Bank Transfer',
+      notes: 'Ref: EBL-9001',
+    };
+
+    const bookingModel: Booking = {
+      id: 'bkg-secret-uuid-9991',
+      bookingRef: 'VN-2026-8687',
+      propertyId: 'viridian-manor',
+      propertyName: 'Viridian Manor',
+      propertyLocation: 'Jolshiri Abashon',
+      clientName: 'Rahim Chowdhury',
+      clientEmail: 'r@example.com',
+      clientPhone: '+8801711998877',
+      parkingSpotIds: [],
+      parkingPrice: 0,
+      totalPrice: 12000000,
+      totalPaid: 100000,
+      balanceDue: 11900000,
+      downPaymentAmount: 100000,
+      stage: 'Down Payment Paid',
+      status: 'Active',
+    };
+
+    const autoCode = getDocumentVerificationInfo(bookingModel, 'payment-receipt', dpPayment, [
+      dpPayment,
+    ]).verificationCode;
+    expect(autoCode).toBe(generateCanonicalPaymentDocCode('bkg-secret-uuid-9991', 'pay-dp-1'));
+
+    const explicitManifest = withPaymentDocRelease(
+      parseInvoiceReleaseManifest(undefined),
+      dpPayment,
+      'issued',
+      { name: 'Super Admin', id: 'sa-1' },
+      '2026-11-28T20:00:00.000Z',
+      'bkg-secret-uuid-9991'
+    );
+    expect(explicitManifest.paymentDocs['pay-dp-1']?.verificationCode).toBe(autoCode);
+
+    const updatedDbBooking = makeDbBooking({
+      notes: mergeInvoiceReleaseManifestIntoNotes('', explicitManifest),
+    });
+    const res = await handleVerifyDocumentRequest(
+      new Request(
+        `https://viridiannexus.com/api/verifyDocument?ref=VN-2026-8687&doc=VN-REC-2026-8687-DP&code=${autoCode}`
+      ),
+      BASE_ENV,
+      { fetchFn: createMockFetch({ bookings: [updatedDbBooking], payments: dbPayments }) }
+    );
+    const body = (await res.json()) as DocumentVerificationResponse;
+    expect(body.verdict).toBe('VERIFIED');
+    expect(body.document?.verificationCodeMatched).toBe(true);
+  });
+
+  it('verifies previously printed Demand Invoice QR as VERIFIED (Already Settled) after full payment is recorded', async () => {
+    // 1. Pre-payment: Admin issued Demand Invoice for Installment #1
+    const unpaidInst: BookingPayment = {
+      id: 'pay-inst-1',
+      bookingId: 'bkg-secret-uuid-9991',
+      type: 'Installment',
+      installmentNumber: 1,
+      scheduledAmount: 1700000,
+      receivedAmount: 0,
+      status: 'Scheduled',
+      paymentMode: 'Cash',
+      notes: '',
+    };
+    const manifestWithDemandIssued = withPaymentDocRelease(
+      parseInvoiceReleaseManifest(undefined),
+      unpaidInst,
+      'issued',
+      { name: 'Admin', id: 'adm-1' },
+      '2026-11-19T10:00:00.000Z',
+      'bkg-secret-uuid-9991'
+    );
+    const prePaymentCode = manifestWithDemandIssued.paymentDocs['pay-inst-1']!.verificationCode;
+
+    // Client printed VN-INV-2026-8687-INS-01 before paying
+    const printedDocUrl = buildDocumentVerificationUrl({
+      origin: 'https://viridiannexus.com',
+      bookingRef: 'VN-2026-8687',
+      invoiceNumber: 'VN-INV-2026-8687-INS-01',
+      verificationCode: prePaymentCode,
+    });
+    expect(printedDocUrl).toContain('doc=VN-INV-2026-8687-INS-01');
+
+    // 2. Later Admin records full payment on pay-inst-1
+    const settledPayments = makeDbPayments().map((p) =>
+      p.id === 'pay-inst-1'
+        ? { ...p, received_amount: 1700000, status: 'Paid', paid_date: '2026-11-28', payment_mode: 'Bank Transfer' }
+        : p
+    );
+    const settledBooking = makeDbBooking({
+      total_paid: 1800000,
+      balance_due: 10200000,
+      stage: 'Installments Running',
+      notes: mergeInvoiceReleaseManifestIntoNotes('', manifestWithDemandIssued),
+    });
+
+    // Scanning the old printed Demand Invoice QR still verifies cleanly!
+    const res = await handleVerifyDocumentRequest(
+      new Request(
+        `https://viridiannexus.com/api/verifyDocument?ref=VN-2026-8687&doc=VN-INV-2026-8687-INS-01&code=${prePaymentCode}`
+      ),
+      BASE_ENV,
+      { fetchFn: createMockFetch({ bookings: [settledBooking], payments: settledPayments }) }
+    );
+    const body = (await res.json()) as DocumentVerificationResponse;
+    expect(body.verdict).toBe('VERIFIED');
+    expect(body.headline).toContain('Already Settled');
+    expect(body.message).toContain('VN-REC-2026-8687-INS-01');
+    expect(body.document?.verificationCodeMatched).toBe(true);
+  });
+
+  it('keeps sequence codes & QR URLs immutable across due-date changes, added charges, and booking metadata edits', () => {
+    const customFirst: BookingPayment = {
+      id: 'pay-tx-1',
+      bookingId: 'bkg-secret-uuid-9991',
+      type: 'Custom Charge',
+      scheduledAmount: 50000,
+      receivedAmount: 50000,
+      status: 'Paid',
+      dueDate: '2026-12-15',
+      paymentMode: 'Cash',
+      notes: '',
+      createdAt: '2026-11-10T10:00:00.000Z',
+    };
+    const customEarlierDueLaterCreated: BookingPayment = {
+      id: 'pay-tx-2',
+      bookingId: 'bkg-secret-uuid-9991',
+      type: 'Custom Charge',
+      scheduledAmount: 25000,
+      receivedAmount: 25000,
+      status: 'Paid',
+      dueDate: '2026-11-01', // Earlier due date, created AFTER pay-tx-1
+      paymentMode: 'Cash',
+      notes: '',
+      createdAt: '2026-11-20T10:00:00.000Z',
+    };
+    const parkingFirst: BookingPayment = {
+      id: 'pay-pk-1',
+      bookingId: 'bkg-secret-uuid-9991',
+      type: 'Add-on Invoice (Parking)',
+      scheduledAmount: 500000,
+      receivedAmount: 500000,
+      status: 'Paid',
+      dueDate: '2026-12-01',
+      paymentMode: 'Bank Transfer',
+      notes: '',
+      createdAt: '2026-11-12T10:00:00.000Z',
+    };
+    const parkingSecond: BookingPayment = {
+      id: 'pay-pk-2',
+      bookingId: 'bkg-secret-uuid-9991',
+      type: 'Add-on Invoice (Parking)',
+      scheduledAmount: 500000,
+      receivedAmount: 0,
+      status: 'Scheduled',
+      dueDate: '2026-11-05',
+      paymentMode: 'Bank Transfer',
+      notes: '',
+      createdAt: '2026-11-22T10:00:00.000Z',
+    };
+
+    const baseBooking: Booking = {
+      id: 'bkg-secret-uuid-9991',
+      bookingRef: 'VN-2026-8687',
+      propertyId: 'viridian-manor',
+      propertyName: 'Viridian Manor',
+      propertyLocation: 'Jolshiri Abashon',
+      clientName: 'Rahim Chowdhury',
+      clientEmail: 'r@example.com',
+      clientPhone: '017',
+      unitType: 'Unit A',
+      unitNumber: 'Floor 3, Unit A',
+      parkingSpotIds: [],
+      parkingPrice: 500000,
+      totalPrice: 12000000,
+      totalPaid: 75000,
+      balanceDue: 11925000,
+      downPaymentAmount: 0,
+      stage: 'Down Payment Paid',
+      status: 'Active',
+    };
+
+    const code = generateCanonicalPaymentDocCode(baseBooking.id, 'pay-tx-1');
+    const initialDoc = buildInvoiceDocument({
+      booking: baseBooking,
+      payments: [customFirst, parkingFirst],
+      category: 'payment-receipt',
+      targetPaymentId: 'pay-tx-1',
+      verificationCode: code,
+      verificationOrigin: 'https://viridiannexus.com',
+    });
+
+    // Mutate array order (by earlier dueDate), add 2nd parking + 2nd custom charge, change unit/client/stage
+    const updatedBooking: Booking = {
+      ...baseBooking,
+      clientName: 'Rahim Uddin Chowdhury',
+      unitNumber: 'Floor 7, Unit B',
+      stage: 'Agreement Signed',
+    };
+    const reorderedPayments = [customEarlierDueLaterCreated, parkingSecond, parkingFirst, customFirst];
+    const afterEditsDoc = buildInvoiceDocument({
+      booking: updatedBooking,
+      payments: reorderedPayments,
+      category: 'payment-receipt',
+      targetPaymentId: 'pay-tx-1',
+      verificationCode: code,
+      verificationOrigin: 'https://viridiannexus.com',
+    });
+
+    expect(initialDoc.invoiceNumber).toBe('VN-REC-2026-8687-TX-01');
+    expect(afterEditsDoc.invoiceNumber).toBe('VN-REC-2026-8687-TX-01');
+    expect(afterEditsDoc.qrPayload).toBe(initialDoc.qrPayload);
+
+    // Distinct non-colliding parking add-on numbers: 1st = PK, 2nd = PK-02
+    const pk1Doc = buildInvoiceDocument({
+      booking: updatedBooking,
+      payments: reorderedPayments,
+      category: 'payment-receipt',
+      targetPaymentId: 'pay-pk-1',
+    });
+    const pk2Doc = buildInvoiceDocument({
+      booking: updatedBooking,
+      payments: reorderedPayments,
+      category: 'demand-invoice',
+      targetPaymentId: 'pay-pk-2',
+    });
+    expect(pk1Doc.invoiceNumber).toBe('VN-REC-2026-8687-PK');
+    expect(pk2Doc.invoiceNumber).toBe('VN-INV-2026-8687-PK-02');
   });
 });

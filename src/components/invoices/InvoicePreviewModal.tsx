@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, ExternalLink, EyeOff, FileCheck2, FileSpreadsheet, FileText, Loader2, Lock, Printer, Receipt, ShieldCheck, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import type { Booking, BookingPayment } from '../../types';
+import { COMPANY_INFO } from '../../data/companyInfo';
 import {
   buildInvoiceDocument,
   classifyPaymentDocumentCategory,
@@ -267,7 +268,7 @@ export default function InvoicePreviewModal({
       targetPaymentId: selectedPaymentId || undefined,
       audience,
       verificationCode: verificationInfo.verified ? verificationInfo.verificationCode : undefined,
-      verificationOrigin: typeof window !== 'undefined' ? window.location.origin : undefined,
+      verificationOrigin: COMPANY_INFO.websiteUrl,
     });
   }, [
     booking,
@@ -279,6 +280,17 @@ export default function InvoicePreviewModal({
     verificationInfo.verified,
     verificationInfo.verificationCode,
   ]);
+
+  const verifyPageHref = useMemo(() => {
+    if (!invoiceDoc) return '';
+    if (typeof window === 'undefined') return invoiceDoc.qrPayload;
+    try {
+      const parsed = new URL(invoiceDoc.qrPayload);
+      return `${window.location.origin}${parsed.pathname}${parsed.search}`;
+    } catch {
+      return invoiceDoc.qrPayload;
+    }
+  }, [invoiceDoc]);
 
   const currentIssuancePolicy = useMemo(() => {
     if (!booking) return null;
@@ -555,7 +567,7 @@ export default function InvoicePreviewModal({
           <div className="flex flex-wrap items-center gap-2">
             {verificationInfo.verified && (
               <a
-                href={invoiceDoc.qrPayload}
+                href={verifyPageHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 inline-flex items-center gap-1.5 transition-colors"

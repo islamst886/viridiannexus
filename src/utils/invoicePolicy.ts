@@ -72,6 +72,20 @@ function generateVerificationCode(seed: string): string {
   return `VN-${(hash >>> 0).toString(36).toUpperCase().padStart(7, '0')}`;
 }
 
+export function generateCanonicalBookingDocCode(
+  bookingId: string,
+  category: BookingInvoiceDocumentKey
+): string {
+  return generateVerificationCode(`${bookingId}:${category}`);
+}
+
+export function generateCanonicalPaymentDocCode(
+  bookingId: string,
+  paymentId: string
+): string {
+  return generateVerificationCode(`${bookingId}:${paymentId}`);
+}
+
 export function stripInvoiceReleaseManifestMarker(notes?: string | null): string {
   if (!notes || typeof notes !== 'string') return '';
   return notes.replace(MANIFEST_REGEX, '').trim();
@@ -486,11 +500,52 @@ export function getDocumentVerificationInfo(
       verified: true,
       issuedBy: 'Viridian Nexus Finance',
       issuedAt: payment.paidDate || payment.updatedAt,
-      verificationCode: generateVerificationCode(`${booking.id}:${payment.id}`),
+      verificationCode: generateCanonicalPaymentDocCode(booking.id, payment.id),
     };
   }
 
   return { verified: false };
+}
+
+/**
+ * Returns every valid verification code historically or canonically associated with
+ * a document so withholding/re-issuing or settling a demand invoice never breaks existing QRs.
+ */
+export function getAcceptedVerificationCodes(
+  booking: Booking,
+  category: InvoiceCategory,
+  payment?: BookingPayment | null,
+  payments: BookingPayment[] = []
+): string[] {
+  const accepted = new Set<string>();
+  const addCode = (raw?: string | null) => {
+    const trimmed = (raw || '').trim().toUpperCase();
+    if (trimmed) accepted.add(trimmed);
+  };
+
+  const activeInfo = getDocumentVerificationInfo(booking, category, payment, payments);
+  if (activeInfo.verified) {
+    addCode(activeInfo.verificationCode);
+  }
+
+  const manifest = parseInvoiceReleaseManifest(booking);
+  if (isBookingDocKey(category)) {
+    addCode(manifest.bookingDocs[category]?.verificationCode);
+    if (booking.id) {
+      addCode(generateCanonicalBookingDocCode(booking.id, category));
+    }
+  } else if (payment) {
+    addCode(manifest.paymentDocs[payment.id]?.verificationCode);
+    if (booking.id) {
+      addCode(generateCanonicalPaymentDocCode(booking.id, payment.id));
+    }
+    const inferred = classifyPaymentDocumentCategory(payment).category;
+    addCode(generateVerificationCode(`${payment.id}:${category}`));
+    addCode(generateVerificationCode(`${payment.id}:${inferred}`));
+    addCode(generateVerificationCode(`${payment.id}:demand-invoice`));
+  }
+
+  return Array.from(accepted);
 }
 
 export function withBookingDocRelease(
@@ -498,8 +553,16 @@ export function withBookingDocRelease(
   category: BookingInvoiceDocumentKey,
   status: InvoiceReleaseStatus,
   actor: { name: string; id?: string | null },
-  timestamp = new Date().toISOString()
+  timestamp = new Date().toISOString(),
+  bookingId?: string
 ): BookingInvoiceReleaseManifest {
+  const existingCode = manifest.bookingDocs[category]?.verificationCode;
+  const verificationCode =
+    existingCode ||
+    (bookingId
+      ? generateCanonicalBookingDocCode(bookingId, category)
+      : generateVerificationCode(`${category}:${actor.name}:${timestamp}`));
+
   return {
     ...manifest,
     bookingDocs: {
@@ -509,7 +572,7 @@ export function withBookingDocRelease(
         issuedBy: actor.name,
         issuedById: actor.id ?? null,
         issuedAt: timestamp,
-        verificationCode: generateVerificationCode(`${category}:${actor.name}:${timestamp}`),
+        verificationCode,
       },
     },
   };
@@ -520,9 +583,17 @@ export function withPaymentDocRelease(
   payment: BookingPayment,
   status: InvoiceReleaseStatus,
   actor: { name: string; id?: string | null },
-  timestamp = new Date().toISOString()
+  timestamp = new Date().toISOString(),
+  bookingId?: string
 ): BookingInvoiceReleaseManifest {
   const docMeta = classifyPaymentDocumentCategory(payment);
+  const existingCode = manifest.paymentDocs[payment.id]?.verificationCode;
+  const verificationCode =
+    existingCode ||
+    (bookingId
+      ? generateCanonicalPaymentDocCode(bookingId, payment.id)
+      : generateVerificationCode(`${payment.id}:${docMeta.category}`));
+
   return {
     ...manifest,
     paymentDocs: {
@@ -534,7 +605,7 @@ export function withPaymentDocRelease(
         issuedBy: actor.name,
         issuedById: actor.id ?? null,
         issuedAt: timestamp,
-        verificationCode: generateVerificationCode(`${payment.id}:${docMeta.category}`),
+        verificationCode,
       },
     },
   };

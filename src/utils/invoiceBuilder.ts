@@ -239,15 +239,56 @@ export function sanitizeInvoiceFilename(raw: string): string {
   return raw.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'Viridian-Invoice';
 }
 
-function deriveSequenceCode(payment: BookingPayment, index: number): string {
-  const rawType = payment.type.toLowerCase();
-  if (isRefundPaymentRow(payment) || rawType.includes('refund')) return 'RFN';
-  if (isCancellationFeeRow(payment) || rawType.includes('cancellation fee')) return 'FEE';
-  if (rawType.includes('down')) return 'DP';
-  if (rawType.includes('parking') && Number(payment.scheduledAmount) < 0) return 'CR-PK';
-  if (rawType.includes('parking')) return 'PK';
-  if (payment.installmentNumber) return `INS-${String(payment.installmentNumber).padStart(2, '0')}`;
-  return `TX-${String(index + 1).padStart(2, '0')}`;
+function getPaymentBaseSequenceCode(payment: BookingPayment): { base: string; numbered: boolean } {
+  const rawType = (payment.type || '').toLowerCase();
+  if (isRefundPaymentRow(payment) || rawType.includes('refund')) {
+    return { base: 'RFN', numbered: false };
+  }
+  if (isCancellationFeeRow(payment) || rawType.includes('cancellation fee')) {
+    return { base: 'FEE', numbered: false };
+  }
+  if (rawType.includes('down')) {
+    return { base: 'DP', numbered: false };
+  }
+  if (rawType.includes('parking') && Number(payment.scheduledAmount) < 0) {
+    return { base: 'CR-PK', numbered: false };
+  }
+  if (rawType.includes('parking')) {
+    return { base: 'PK', numbered: false };
+  }
+  if (payment.installmentNumber) {
+    return { base: `INS-${String(payment.installmentNumber).padStart(2, '0')}`, numbered: true };
+  }
+  return { base: 'TX', numbered: false };
+}
+
+function comparePaymentsImmutableOrder(a: BookingPayment, b: BookingPayment): number {
+  const aMs = a.createdAt ? Date.parse(a.createdAt) : Number.NaN;
+  const bMs = b.createdAt ? Date.parse(b.createdAt) : Number.NaN;
+  if (Number.isFinite(aMs) && Number.isFinite(bMs) && aMs !== bMs) {
+    return aMs - bMs;
+  }
+  return (a.id || '').localeCompare(b.id || '');
+}
+
+export function deriveSequenceCode(
+  payment: BookingPayment,
+  allPayments: BookingPayment[] = []
+): string {
+  const { base, numbered } = getPaymentBaseSequenceCode(payment);
+  if (numbered) return base;
+
+  const siblings = allPayments
+    .filter((p) => getPaymentBaseSequenceCode(p).base === base)
+    .sort(comparePaymentsImmutableOrder);
+
+  const posIdx = siblings.findIndex((p) => p.id === payment.id);
+  const rank = posIdx >= 0 ? posIdx + 1 : 1;
+
+  if (base === 'TX') {
+    return `TX-${String(rank).padStart(2, '0')}`;
+  }
+  return rank === 1 ? base : `${base}-${String(rank).padStart(2, '0')}`;
 }
 
 function inferRowInvoiceCategory(payment: BookingPayment): InvoiceCategory {
@@ -652,9 +693,8 @@ export function buildInvoiceDocument({
       paymentMode: 'Bank Transfer',
       notes: '',
     };
-    const safeIdx = idx >= 0 ? idx : 0;
     const lineItem = buildLineItem(selected, 1, issueDate, audience, booking.status);
-    const seqCode = deriveSequenceCode(selected, safeIdx);
+    const seqCode = deriveSequenceCode(selected, payments);
     const effectiveCategory = targetPaymentId ? inferRowInvoiceCategory(selected) : category;
     const isParkingAddon = selected.type.toLowerCase().includes('parking') && selected.scheduledAmount >= 0;
 

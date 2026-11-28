@@ -1614,7 +1614,8 @@ function PaymentModal({
           paidPaymentRecord,
           issueReceiptToClient ? 'issued' : 'withheld',
           { name: adminName, id: adminUid },
-          nowIso
+          nowIso,
+          bookingId
         );
         const nextBookingNotes = mergeInvoiceReleaseManifestIntoNotes(bookingRow.notes, nextManifest);
 

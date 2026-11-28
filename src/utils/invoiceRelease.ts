@@ -16,6 +16,9 @@ import {
 export {
   BOOKING_INVOICE_DOC_LABELS,
   evaluateDocumentIssuancePolicy,
+  generateCanonicalBookingDocCode,
+  generateCanonicalPaymentDocCode,
+  getAcceptedVerificationCodes,
   getClientAuthorizedBookingCategories,
   getClientAuthorizedPayments,
   getClientTotalAuthorizedDocumentsCount,
@@ -70,14 +73,16 @@ export async function persistBookingInvoiceRelease(params: {
           target.category as BookingInvoiceDocumentKey,
           nextStatus,
           { name: actorName, id: actorId },
-          nowIso
+          nowIso,
+          booking.id
         )
       : withPaymentDocRelease(
           currentManifest,
           target.payment,
           nextStatus,
           { name: actorName, id: actorId },
-          nowIso
+          nowIso,
+          booking.id
         );
 
   const nextNotes = mergeInvoiceReleaseManifestIntoNotes(booking.notes, nextManifest);
