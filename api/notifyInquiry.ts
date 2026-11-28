@@ -2,6 +2,7 @@ import {
   handleNotifyInquiryRequest,
   type NotifyInquiryEnv,
 } from '../src/utils/inquiryWhatsAppServer.js';
+import { getProcessEnv } from '../src/utils/serverEnv.js';
 
 interface ApiRequest {
   method?: string;
@@ -40,7 +41,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
   const webResponse = await handleNotifyInquiryRequest(
     webRequest,
-    process.env as unknown as NotifyInquiryEnv
+    getProcessEnv() as unknown as NotifyInquiryEnv
   );
   const payload = (await webResponse.json().catch(() => ({}))) as unknown;
   return res.status(webResponse.status).json(payload);

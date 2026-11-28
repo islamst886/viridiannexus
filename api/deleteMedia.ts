@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getProcessEnv } from '../src/utils/serverEnv.js';
 
 interface ApiRequest {
   method?: string;
@@ -108,11 +109,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const rawSupabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const env = getProcessEnv();
+  const rawSupabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').trim();
   const supabaseUrl = rawSupabaseUrl
     .replace(/\/+(?:rest|auth|storage|realtime)\/v1\/?$/i, '')
     .replace(/\/+$/, '');
-  const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const serviceRoleKey = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
   if (!supabaseUrl || !serviceRoleKey) {
     return res.status(500).json({ error: 'Server configuration error' });

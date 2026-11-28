@@ -2,6 +2,7 @@ import {
   handleVerifyDocumentRequest,
   type VerifyDocumentEnv,
 } from '../src/utils/documentVerificationServer.js';
+import { getProcessEnv } from '../src/utils/serverEnv.js';
 
 interface ApiRequest {
   method?: string;
@@ -55,7 +56,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
   const webResponse = await handleVerifyDocumentRequest(
     webRequest,
-    process.env as unknown as VerifyDocumentEnv
+    getProcessEnv() as unknown as VerifyDocumentEnv
   );
   res.setHeader('Cache-Control', 'no-store');
   const payload = (await webResponse.json().catch(() => ({}))) as unknown;
