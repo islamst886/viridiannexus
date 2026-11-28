@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../supabase';
-import { deleteMedia } from '../../utils/supabaseStorage';
+import { isActiveAllocationStatus } from '../../utils/bookingAllocation';
+import {
+  deletePropertySafely,
+  fetchPropertyDeletionCheck,
+} from '../../utils/propertyDeletion';
 import type { Property } from '../../types';
-import { Plus, Trash2, Users, Building, DollarSign } from 'lucide-react';
+import { Plus, Trash2, Users, Building, DollarSign, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import AdminSidebar from '../../components/AdminSidebar';
 import { useGlobalState } from '../../context/GlobalState';
@@ -19,8 +23,10 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [stats, setStats] = useState<DashboardStats>({ users: 0, properties: 0, value: 0 });
+  const [activeBookingCounts, setActiveBookingCounts] = useState<Record<string, number>>({});
+  const [deletingPropertyId, setDeletingPropertyId] = useState<string | null>(null);
 
-  const { properties: globalProperties, loadingProperties } = useGlobalState();
+  const { properties: globalProperties, loadingProperties, fetchProperties } = useGlobalState();
 
   // Use GlobalState properties (already realtime)
   useEffect(() => {
@@ -37,10 +43,23 @@ export default function AdminDashboard() {
         .select('*', { count: 'exact', head: true });
       const { data: bookingsData } = await supabase
         .from('bookings')
-        .select('total_price, status')
-        .neq('status', 'Cancelled');
-      const totalValue = ((bookingsData as { total_price?: number | string | null }[] | null) || [])
-        .reduce((acc, b) => acc + (Number(b.total_price) || 0), 0);
+        .select('property_id, total_price, status');
+      const rows =
+        (bookingsData as {
+          property_id?: string | null;
+          total_price?: number | string | null;
+          status?: string | null;
+        }[] | null) || [];
+      let totalValue = 0;
+      const countsByProperty: Record<string, number> = {};
+      for (const b of rows) {
+        if (!isActiveAllocationStatus(b.status)) continue;
+        totalValue += Number(b.total_price) || 0;
+        if (b.property_id) {
+          countsByProperty[b.property_id] = (countsByProperty[b.property_id] || 0) + 1;
+        }
+      }
+      setActiveBookingCounts(countsByProperty);
       setStats(prev => ({ ...prev, users: usersCount || 0, value: totalValue }));
     };
     void fetchStats();
@@ -56,43 +75,60 @@ export default function AdminDashboard() {
   }, []);
 
   const handleDelete = async (property: Property): Promise<void> => {
-    if (window.confirm('Are you sure you want to delete this property? All associated media will also be permanently deleted.')) {
-      try {
-        // Gather all associated Supabase Storage media for recursive deletion
-        const allMediaUrls: string[] = [];
+    if (deletingPropertyId) return;
+    setDeletingPropertyId(property.id);
 
-        if (property.images) {
-          Object.values(property.images).forEach(val => {
-            if (Array.isArray(val)) {
-              val.forEach(url => { if (url && typeof url === 'string') allMediaUrls.push(url); });
-            } else if (val && typeof val === 'string') {
-              allMediaUrls.push(val);
-            } else if (val && typeof val === 'object') {
-              Object.values(val as Record<string, unknown>).forEach(nested => {
-                if (nested && typeof nested === 'string') allMediaUrls.push(nested);
-              });
-            }
-          });
-        }
-        if (property.brochureUrl) allMediaUrls.push(property.brochureUrl);
-        if (property.milestones && Array.isArray(property.milestones)) {
-          property.milestones.forEach(m => {
-            if (m.images && Array.isArray(m.images)) m.images.forEach(url => { if (url) allMediaUrls.push(url); });
-            if (m.imageUrl) allMediaUrls.push(m.imageUrl);
-          });
-        }
-
-        if (allMediaUrls.length > 0) {
-          toast.info(`Deleting ${allMediaUrls.length} associated media files...`);
-          await Promise.all(allMediaUrls.map(url => deleteMedia(url)));
-        }
-
-        const { error } = await supabase.from('properties').delete().eq('id', property.id);
-        if (error) throw error;
-        toast.success('Property deleted completely.');
-      } catch {
-        toast.error('Failed to delete property');
+    try {
+      const dependencyCheck = await fetchPropertyDeletionCheck(property.id);
+      if (!dependencyCheck.canDelete) {
+        toast.error(dependencyCheck.blockers.join(' '));
+        return;
       }
+
+      const historyParts: string[] = [];
+      if (dependencyCheck.cancelledBookingIds.length > 0) {
+        historyParts.push(
+          `${dependencyCheck.cancelledBookingIds.length} cancelled booking(s)`
+        );
+      }
+      if (dependencyCheck.processedRequestIds.length > 0) {
+        historyParts.push(
+          `${dependencyCheck.processedRequestIds.length} processed booking request(s)`
+        );
+      }
+      const historyNote =
+        historyParts.length > 0
+          ? `\n\nHistorical records (${historyParts.join(' and ')}) will be preserved with their property link cleared.`
+          : '';
+
+      if (
+        !window.confirm(
+          `Are you sure you want to permanently delete "${property.name}"?${historyNote}\n\nAll associated media files will be removed only after the property record is deleted.`
+        )
+      ) {
+        return;
+      }
+
+      const result = await deletePropertySafely({ property });
+      if (!result.deleted) {
+        toast.error(result.error || 'Failed to delete property.');
+        return;
+      }
+
+      await fetchProperties();
+
+      if (result.failedMediaCount > 0) {
+        toast.warning(
+          `Property deleted, though ${result.failedMediaCount} media file(s) could not be removed from storage.`
+        );
+      } else {
+        toast.success('Property and associated media deleted completely.');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unexpected error deleting property.';
+      toast.error(msg);
+    } finally {
+      setDeletingPropertyId(null);
     }
   };
 
@@ -204,29 +240,55 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filtered.map((prop) => (
-                      <tr key={prop.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-brand-dark">{prop.name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{prop.location}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {Array.isArray(prop.propertyType)
-                            ? (prop.propertyType.length > 0 ? prop.propertyType.join(', ') : <span className="italic text-gray-300">—</span>)
-                            : (prop.propertyType || <span className="italic text-gray-300">—</span>)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-brand-primary font-semibold">{prop.price}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            {prop.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <Link to={`/admin/property/${prop.id}`} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</Link>
-                          <button onClick={() => { void handleDelete(prop); }} className="text-red-600 hover:text-red-900 inline-flex items-center gap-1" title="Delete Property">
-                            <Trash2 size={14} /> Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {filtered.map((prop) => {
+                      const activeCount = activeBookingCounts[prop.id] || 0;
+                      const isDeleting = deletingPropertyId === prop.id;
+                      return (
+                        <tr key={prop.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-brand-dark">
+                            <div>{prop.name}</div>
+                            {activeCount > 0 && (
+                              <span className="mt-1 inline-block px-2 py-0.5 text-[11px] font-semibold rounded bg-amber-100 text-amber-800">
+                                {activeCount} Active Booking{activeCount === 1 ? '' : 's'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{prop.location}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {Array.isArray(prop.propertyType)
+                              ? (prop.propertyType.length > 0 ? prop.propertyType.join(', ') : <span className="italic text-gray-300">—</span>)
+                              : (prop.propertyType || <span className="italic text-gray-300">—</span>)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-brand-primary font-semibold">{prop.price}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                              {prop.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <Link to={`/admin/property/${prop.id}`} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</Link>
+                            <button
+                              type="button"
+                              onClick={() => { void handleDelete(prop); }}
+                              disabled={Boolean(deletingPropertyId)}
+                              className={`inline-flex items-center gap-1 disabled:opacity-50 ${
+                                activeCount > 0
+                                  ? 'text-amber-700 hover:text-amber-900'
+                                  : 'text-red-600 hover:text-red-900'
+                              }`}
+                              title={
+                                activeCount > 0
+                                  ? `Cannot delete while ${activeCount} active booking(s) reference this property`
+                                  : 'Delete Property'
+                              }
+                            >
+                              {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              {isDeleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}

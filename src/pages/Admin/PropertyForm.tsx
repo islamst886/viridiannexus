@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { ChangeEvent, CSSProperties, FormEvent } from 'react';
 import { supabase } from '../../supabase';
-import { uploadMedia, deleteMedia, deleteMediaBeacon } from '../../utils/supabaseStorage';
+import {
+  uploadMedia,
+  deleteMedia,
+  deleteMediaBeacon,
+  slugifyPropertyId,
+  resolvePropertyStoragePrefix,
+  moveMediaToPrefix,
+} from '../../utils/supabaseStorage';
 import { normalizeExternalUrl } from '../../utils/urlHelpers';
 import { mapPropertyToDB, normalizeCustomAmenities } from '../../utils/mappers';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -352,12 +359,21 @@ export default function PropertyForm() {
       return;
     }
 
+    const storagePrefix = resolvePropertyStoragePrefix(formData.id, formData.name);
+    if (!storagePrefix) {
+      toast.error(
+        'Please enter a valid Property Name (or Property ID, not "new") before uploading media so files are stored in this property\'s own folder.'
+      );
+      e.target.value = '';
+      return;
+    }
+
     setUploadingImage('gallery');
     toast.info(`Uploading ${files.length} image(s) to gallery...`);
     const newGalleryUrls: string[] = [];
     try {
       for (const file of files) {
-        const publicUrl = await uploadMedia(file, 'gallery', formData.id || 'new');
+        const publicUrl = await uploadMedia(file, 'gallery', storagePrefix);
         setNewlyUploadedMedia((prev) => [...prev, publicUrl]);
         newGalleryUrls.push(publicUrl);
       }
@@ -372,6 +388,7 @@ export default function PropertyForm() {
       toast.error(`Error uploading gallery: ${message}`);
       console.error(error);
     } finally {
+      e.target.value = '';
       setUploadingImage(null);
     }
   };
@@ -408,10 +425,19 @@ export default function PropertyForm() {
       return;
     }
 
+    const storagePrefix = resolvePropertyStoragePrefix(formData.id, formData.name);
+    if (!storagePrefix) {
+      toast.error(
+        'Please enter a valid Property Name (or Property ID, not "new") before uploading media so files are stored in this property\'s own folder.'
+      );
+      e.target.value = '';
+      return;
+    }
+
     setUploadingImage(mediaType);
     toast.info(`Uploading ${mediaType}...`);
     try {
-      const publicUrl = await uploadMedia(file, mediaType, formData.id || 'new');
+      const publicUrl = await uploadMedia(file, mediaType, storagePrefix);
 
       // Queue old media for deletion
       const oldUrl = mediaType === 'brochure' ? formData.brochureUrl : formData.images[mediaType];
@@ -431,6 +457,7 @@ export default function PropertyForm() {
       toast.error(`Error uploading: ${message}`);
       console.error(error);
     } finally {
+      e.target.value = '';
       setUploadingImage(null);
     }
   };
@@ -458,7 +485,34 @@ export default function PropertyForm() {
         }
       }
 
-      const propId = formData.id || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const propId = isEditing
+        ? id || slugifyPropertyId(formData.id)
+        : resolvePropertyStoragePrefix(formData.id, formData.name);
+
+      if (!propId) {
+        toast.error('Please enter a valid Property Name or Property ID (cannot be "new").');
+        setLoading(false);
+        setBypassUnsavedGuard(false);
+        return;
+      }
+
+      if (!isEditing) {
+        const { data: existingProp, error: checkErr } = await supabase
+          .from('properties')
+          .select('id')
+          .eq('id', propId)
+          .maybeSingle();
+        if (checkErr) throw checkErr;
+        if (existingProp) {
+          toast.error(
+            `A property with ID "${propId}" already exists. Please choose a unique Property ID or Name.`
+          );
+          setLoading(false);
+          setBypassUnsavedGuard(false);
+          return;
+        }
+      }
+
       const normalizedFormData: Property = {
         ...formData,
         id: propId,
@@ -476,6 +530,39 @@ export default function PropertyForm() {
           video: formData.images.video.trim() ? normalizeExternalUrl(formData.images.video) : '',
         },
       };
+
+      // Relocate any newly uploaded files if Property Name or ID changed after uploading
+      if (newlyUploadedRef.current.length > 0) {
+        const movedEntries = await Promise.all(
+          newlyUploadedRef.current.map(async (origUrl) => {
+            const nextUrl = await moveMediaToPrefix(origUrl, propId);
+            return [origUrl, nextUrl] as const;
+          })
+        );
+        const relocatedUrlMap = new Map<string, string>();
+        for (const [origUrl, nextUrl] of movedEntries) {
+          if (origUrl && nextUrl && origUrl !== nextUrl) {
+            relocatedUrlMap.set(origUrl, nextUrl);
+          }
+        }
+        if (relocatedUrlMap.size > 0) {
+          const remapUrl = (u: string) => relocatedUrlMap.get(u) ?? u;
+          newlyUploadedRef.current = newlyUploadedRef.current.map(remapUrl);
+          normalizedFormData.brochureUrl = normalizedFormData.brochureUrl
+            ? remapUrl(normalizedFormData.brochureUrl)
+            : '';
+          normalizedFormData.images = {
+            ...normalizedFormData.images,
+            hero: normalizedFormData.images.hero ? remapUrl(normalizedFormData.images.hero) : '',
+            map: normalizedFormData.images.map ? remapUrl(normalizedFormData.images.map) : '',
+            floorPlan: normalizedFormData.images.floorPlan
+              ? remapUrl(normalizedFormData.images.floorPlan)
+              : '',
+            video: normalizedFormData.images.video ? remapUrl(normalizedFormData.images.video) : '',
+            gallery: (normalizedFormData.images.gallery || []).map(remapUrl),
+          };
+        }
+      }
 
       // Validate uniqueness and protect all assets locked by active bookings
       let liveActiveBookings: ActiveBookingAllocationRow[] = [];
@@ -515,7 +602,9 @@ export default function PropertyForm() {
 
       const dbData = mapPropertyToDB(normalizedFormData);
 
-      const { error } = await supabase.from('properties').upsert(dbData, { onConflict: 'id' });
+      const { error } = isEditing
+        ? await supabase.from('properties').update(dbData).eq('id', propId)
+        : await supabase.from('properties').insert(dbData);
       if (error) throw error;
 
       // Mark save successful & clear newly uploaded tracking synchronously so unmount doesn't delete them
@@ -677,6 +766,10 @@ export default function PropertyForm() {
     setIsDirty(true);
   };
 
+  const resolvedPreviewSlug = !isEditing
+    ? resolvePropertyStoragePrefix(formData.id, formData.name)
+    : '';
+
   return (
     <div className="min-h-screen bg-gray-50 p-10">
       <div className="max-w-4xl mx-auto">
@@ -726,6 +819,11 @@ export default function PropertyForm() {
               />
               <p className="text-xs text-gray-400 mt-1">
                 Leave blank to auto-generate from name. Cannot be changed later.
+                {!isEditing && resolvedPreviewSlug && (
+                  <span className="block text-brand-primary font-medium mt-0.5">
+                    Will be saved as ID &amp; media folder: <code>{resolvedPreviewSlug}</code>
+                  </span>
+                )}
               </p>
             </div>
 

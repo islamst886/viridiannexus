@@ -23,6 +23,61 @@ const BUCKET_MAP: Record<string, string> = {
 };
 
 export const MAX_SUPABASE_FILE_SIZE = 50 * 1024 * 1024; // 50MB Supabase hard limit
+export const RESERVED_PROPERTY_SLUGS = new Set(['new']);
+
+export function slugifyPropertyId(raw?: string | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Resolves a non-reserved property slug to isolate DB IDs and Storage folders
+ * per property. Returns empty string if neither ID nor Name yields a valid slug.
+ */
+export function resolvePropertyStoragePrefix(
+  propertyId?: string | null,
+  propertyName?: string | null
+): string {
+  const candidate = slugifyPropertyId(propertyId) || slugifyPropertyId(propertyName);
+  if (!candidate || RESERVED_PROPERTY_SLUGS.has(candidate)) {
+    return '';
+  }
+  return candidate;
+}
+
+function sanitizeStoragePrefix(prefix = ''): string {
+  return prefix
+    .split(/[/\\]/)
+    .filter((seg) => seg && seg !== '.' && seg !== '..')
+    .map((seg) => seg.replace(/[^a-zA-Z0-9_-]/g, '_'))
+    .filter(Boolean)
+    .join('/');
+}
+
+function createShortSuffix(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().slice(0, 6);
+  }
+  return Math.random().toString(36).slice(2, 8);
+}
+
+export function buildMediaStoragePath(
+  mediaType: MediaType | string,
+  fileName: string,
+  prefix = ''
+): string {
+  const timestamp = Date.now();
+  const uniqueSuffix = createShortSuffix();
+  const baseFile = (fileName || 'file').split(/[/\\]/).pop() || 'file';
+  const sanitizedName = baseFile.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.{2,}/g, '.');
+  const sanitizedPrefix = sanitizeStoragePrefix(prefix);
+  const baseName = `${mediaType}_${timestamp}_${uniqueSuffix}_${sanitizedName}`;
+  return sanitizedPrefix ? `${sanitizedPrefix}/${baseName}` : baseName;
+}
 
 /**
  * Uploads a file to Supabase Storage and returns its public URL.
@@ -40,17 +95,7 @@ export const uploadMedia = async (
   }
 
   const bucket = BUCKET_MAP[mediaType] || 'property-media';
-  const timestamp = Date.now();
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const sanitizedPrefix = prefix
-    .replace(/[^a-zA-Z0-9/_-]/g, '_')
-    .split('/')
-    .filter((seg) => seg && seg !== '.' && seg !== '..')
-    .join('/');
-
-  const path = sanitizedPrefix
-    ? `${sanitizedPrefix}/${mediaType}_${timestamp}_${sanitizedName}`
-    : `${mediaType}_${timestamp}_${sanitizedName}`;
+  const path = buildMediaStoragePath(mediaType, file.name, prefix);
 
   const { data, error } = await supabase.storage
     .from(bucket)
@@ -64,6 +109,48 @@ export const uploadMedia = async (
 
   return publicUrl;
 };
+
+/**
+ * Moves a newly uploaded Supabase Storage file into the target property prefix
+ * if the property name or ID was updated between upload and save.
+ */
+export async function moveMediaToPrefix(url: string, targetPrefix: string): Promise<string> {
+  if (!url || typeof url !== 'string') return url;
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) return url;
+
+  const parsed = parseSupabaseStorageUrl(url, supabaseUrl);
+  if (!parsed) return url;
+
+  const sanitizedPrefix = sanitizeStoragePrefix(targetPrefix);
+  if (!sanitizedPrefix) return url;
+
+  const segments = parsed.filePath.split('/').filter(Boolean);
+  const fileName = segments.pop();
+  if (!fileName) return url;
+
+  const currentPrefix = segments.join('/');
+  if (currentPrefix === sanitizedPrefix) return url;
+
+  const nextPath = `${sanitizedPrefix}/${fileName}`;
+  try {
+    const { error } = await supabase.storage
+      .from(parsed.bucket)
+      .move(parsed.filePath, nextPath);
+    if (error) {
+      console.warn('[moveMediaToPrefix] Storage move warning:', error.message);
+      return url;
+    }
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(parsed.bucket).getPublicUrl(nextPath);
+    return publicUrl || url;
+  } catch (err) {
+    console.warn('[moveMediaToPrefix] Unexpected move error:', err);
+    return url;
+  }
+}
 
 /**
  * Deletes a file from Supabase Storage using its public URL.

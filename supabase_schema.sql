@@ -66,7 +66,7 @@ CREATE TABLE public.properties (
 
 CREATE TABLE public.bookings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  property_id TEXT REFERENCES public.properties(id),
+  property_id TEXT REFERENCES public.properties(id) ON DELETE SET NULL,
   property_name TEXT,
   client_name TEXT,
   client_email TEXT,
@@ -131,7 +131,7 @@ CREATE TABLE public.booking_activity_log (
 
 CREATE TABLE public.booking_requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  property_id TEXT REFERENCES public.properties(id),
+  property_id TEXT REFERENCES public.properties(id) ON DELETE SET NULL,
   property_name TEXT,
   linked_user_id UUID REFERENCES public.profiles(id),
   client_name TEXT,
@@ -605,6 +605,56 @@ CREATE TRIGGER trg_enforce_booking_asset_exclusivity
   BEFORE INSERT OR UPDATE ON public.bookings
   FOR EACH ROW
   EXECUTE FUNCTION public.enforce_booking_asset_exclusivity();
+
+-- Guard property deletion when active bookings or pending requests exist,
+-- and safely detach historical cancelled/processed references atomically.
+CREATE OR REPLACE FUNCTION public.guard_property_deletion()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_active_count INTEGER;
+  v_pending_req_count INTEGER;
+BEGIN
+  SELECT COUNT(*)
+  INTO v_active_count
+  FROM public.bookings b
+  WHERE b.property_id = OLD.id
+    AND COALESCE(b.status, 'Active') <> 'Cancelled';
+
+  IF v_active_count > 0 THEN
+    RAISE EXCEPTION 'Cannot delete property (%): % active booking(s) still reference it.', OLD.id, v_active_count
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+
+  SELECT COUNT(*)
+  INTO v_pending_req_count
+  FROM public.booking_requests br
+  WHERE br.property_id = OLD.id
+    AND LOWER(COALESCE(NULLIF(BTRIM(br.status), ''), 'pending')) IN ('pending', 'pending review');
+
+  IF v_pending_req_count > 0 THEN
+    RAISE EXCEPTION 'Cannot delete property (%): % pending booking request(s) still reference it.', OLD.id, v_pending_req_count
+      USING ERRCODE = 'restrict_violation';
+  END IF;
+
+  -- Preserve historical cancelled bookings & processed requests while unblocking DELETE
+  UPDATE public.bookings
+  SET property_id = NULL
+  WHERE property_id = OLD.id
+    AND COALESCE(status, 'Active') = 'Cancelled';
+
+  UPDATE public.booking_requests
+  SET property_id = NULL
+  WHERE property_id = OLD.id;
+
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_guard_property_deletion ON public.properties;
+CREATE TRIGGER trg_guard_property_deletion
+  BEFORE DELETE ON public.properties
+  FOR EACH ROW
+  EXECUTE FUNCTION public.guard_property_deletion();
 
 -- ==========================================
 -- 4. STORAGE BUCKETS & POLICIES
